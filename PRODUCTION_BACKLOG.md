@@ -2,43 +2,54 @@
 
 ## Product decision
 
-Beholdr is currently a lightweight Kubernetes resource observer with external
-telemetry-provider integration. It is **not** a replacement for New Relic,
-Grafana, or Prometheus, and per the roadmap decided in #24 it does not intend
-to become one: modules *consume* existing Prometheus, Elasticsearch, and
-OpenTelemetry data rather than Beholdr owning ingestion, storage, or query
-evaluation itself. Kubernetes state still has about one hour of in-memory
-history, while Prometheus supplies bounded per-service long-range charts.
-Beholdr has no notification delivery, log/trace search, durable storage of its
-own, built-in authentication, or arbitrary metric query capability — and per
-#24's stated non-goals, unrestricted user-supplied query access and owning the
-telemetry database are deliberately out of scope before v1.
+Beholdr today is a lightweight Kubernetes resource observer with external
+telemetry-provider integration. Kubernetes state has about one hour of
+in-memory history, while Prometheus supplies bounded per-service long-range
+charts. There is no notification delivery, log or trace search, durable
+storage, built-in authentication, or arbitrary metric query capability.
 
-This document tracks execution against track 1 below. The architecture,
-runtime-module contract, and version roadmap for track 2 are decided in #24;
-items here that touch that direction are scoped to match it rather than
-re-litigating it.
+**The architecture direction is under active revision.** An earlier note held
+that Beholdr would only ever *consume* existing Prometheus, Elasticsearch and
+OpenTelemetry data, never owning ingestion, storage or query evaluation. The
+target architecture contradicts that — `gaze` owns the ingestion path and
+`lair` owns the query path — so the decision is being re-recorded rather than
+inherited. See [#1](https://github.com/BeholdrApp/Beholdr/issues/1).
+
+One non-goal survives the revision unchanged: **unrestricted user-supplied
+query access stays out of scope.** `lair` exposes named, bounded queries, never
+a passthrough for arbitrary PromQL.
+
+The platform shape — three repositories, six components — is recorded in
+[#2](https://github.com/BeholdrApp/Beholdr/issues/2), with the full sequencing
+in [ROADMAP.md](ROADMAP.md).
 
 1. Make the existing observer safe and dependable for production use.
-2. Extend it into a modular observability platform along the roadmap and
-   non-goals #24 already decided, not by having Beholdr replace the
-   telemetry systems it integrates with.
+2. Extend it into a modular observability platform along the architecture
+   recorded in [#1](https://github.com/BeholdrApp/Beholdr/issues/1)–[#4](https://github.com/BeholdrApp/Beholdr/issues/4).
 
 Priorities: **P0** blocks a production release; **P1** belongs in the first
 production-ready release; **P2** is planned follow-up.
 
 ## Release status
 
-The published `v0.2.0` tag is a **prerelease/preview**, not a completed
-milestone: it shipped before all of the [v0.2.0 milestone](https://github.com/BeholdrApp/Beholdr/milestone/1)'s
-required items (#4-#7) and release checks were finished, which the release
-notes now say explicitly (see #34). The tag is not being moved. Per #24, a
-tag and GitHub Release are only created once all required milestone items
-and release-qualification checks pass — that policy applies from here on;
-a labeled preview may still ship early. A 2026-09-05 audit of this preview
-found further defects, tracked as patch-level fixes in the
-[v0.2.1 milestone](https://github.com/BeholdrApp/Beholdr/milestone/7) (#25-#33),
-independent of finishing the v0.2.0 feature scope.
+**There is no published release.** `BeholdrApp/Beholdr` has no tags, no GitHub
+Releases and no prior issue history — earlier drafts of this document cited a
+`v0.2.0` prerelease, milestones, and issue numbers that were never created in
+this repository. Those references have been removed rather than reconstructed.
+
+The live milestones are:
+
+| Milestone | Scope |
+| --- | --- |
+| [v0.3.0 — Observer hardening](https://github.com/BeholdrApp/Beholdr/milestone/1) | Close the remaining P0 blockers below. No new architecture. |
+| [v0.4.0 — Platform foundations](https://github.com/BeholdrApp/Beholdr/milestone/2) | ADRs, `lair` ports and conformance suite, deployment profiles. |
+| [v0.5.0 — Ingestion and agent](https://github.com/BeholdrApp/Beholdr/milestone/3) | `gaze`, the `stalkr` split, cross-repo contracts. |
+| [v0.6.0 — Alerting](https://github.com/BeholdrApp/Beholdr/milestone/4) | `omen`. |
+| [v1.0.0 — Production platform](https://github.com/BeholdrApp/Beholdr/milestone/5) | First supported release of the full platform. |
+
+Release policy from here on: a tag and GitHub Release are created only once
+all required milestone items and release-qualification checks pass. A clearly
+labeled preview may still ship early.
 
 ## Delivered foundations
 
@@ -103,7 +114,7 @@ independent of finishing the v0.2.0 feature scope.
 
 ## P0 — remaining release blockers
 
-- [ ] **Make collector health and metric availability correct under failure.**
+- [ ] **Make collector health and metric availability correct under failure** ([#5](https://github.com/BeholdrApp/Beholdr/issues/5))**.**
   Synchronize client state or return availability/errors as part of each
   collection result; recover to “available” after a later successful metrics
   read; show partial-data and stale-data states in the UI.  
@@ -111,11 +122,11 @@ independent of finishing the v0.2.0 feature scope.
   becomes permanently false after one error, and current zero values are
   indistinguishable from missing metrics.
 
-- [ ] **Finish supply-chain hardening.** Dependency locks and deterministic
+- [ ] **Finish supply-chain hardening** ([#6](https://github.com/BeholdrApp/Beholdr/issues/6))**.** Dependency locks and deterministic
   builds are in place. Pin base images and GitHub Actions by digest/immutable
   revision, generate an SBOM, and scan image/dependencies in CI.
 
-- [ ] **Finish automated quality gates.** Backend/frontend tests and builds plus
+- [ ] **Finish automated quality gates** ([#7](https://github.com/BeholdrApp/Beholdr/issues/7))**.** Backend/frontend tests and builds plus
   the container build run on pull requests. Add IaC validation, vulnerability
   and license checks, publish coverage, and fail on coverage regressions.
 
@@ -178,47 +189,48 @@ independent of finishing the v0.2.0 feature scope.
   guarantees, and troubleshooting. Remove or add the missing Terraform README
   referenced by the root README.
 
-## P1 — platform capabilities beyond the .NET module roadmap (scoped by #24)
+## P1 — platform capabilities
 
-The architecture decision this section used to ask for — integrate with
-existing telemetry systems versus have Beholdr own ingestion/storage/query —
-is made: #24 commits to the integration path, with owning the telemetry
-database and unrestricted user-supplied query access as explicit non-goals
-before v1. The items below are scoped to that decision; they are not a
-proposal to revisit it.
+The architecture decision this section used to defer — integrate with
+existing telemetry systems versus have Beholdr own ingestion and query — is
+being recorded in [#1](https://github.com/BeholdrApp/Beholdr/issues/1). The target architecture has Beholdr owning the
+ingestion path (`gaze`) and the query path (`lair`) while still delegating
+storage engines and rule evaluation to established systems. Unrestricted
+user-supplied query access remains a non-goal.
 
-- [ ] **Resolve what #24's roadmap leaves open within the integration
-  decision.** Tenancy, data model for cross-provider correlation, retention
-  policy for Beholdr's own operational state (see "Persist history" above),
-  cost model, availability SLOs, and the migration path as more runtime
-  modules and providers are added.
+- [ ] **Resolve what the architecture decision leaves open.** Tenancy, data
+  model for cross-provider correlation, retention policy for Beholdr's own
+  operational state (see "Persist history" above), cost model, availability
+  SLOs, and the migration path as more providers are added. Tenancy is
+  partly covered by [#9](https://github.com/BeholdrApp/Beholdr/issues/9); correlation by [#8](https://github.com/BeholdrApp/Beholdr/issues/8) and [#21](https://github.com/BeholdrApp/Beholdr/issues/21).
 
 - [ ] **Adopt OpenTelemetry as an integration contract alongside Prometheus.**
   Support OTLP for traces, metrics, and logs from existing OpenTelemetry
   pipelines; propagate service/resource attributes; provide Kubernetes
-  enrichment; and publish language/platform onboarding examples. Beholdr
-  consumes this data from the systems that already store it — it does not
-  stand up its own ingestion or storage path.
+  enrichment; and publish language/platform onboarding examples. Ingestion is
+  `gaze`'s job — see [#17](https://github.com/BeholdrApp/Beholdr/issues/17) and [#18](https://github.com/BeholdrApp/Beholdr/issues/18); the agents are
+  [net-spectatr](https://github.com/BeholdrApp/net-spectatr) and any
+  OTLP-compliant instrumentation.
 
 - [ ] **Extend metric consumption from Prometheus and OpenTelemetry.**
   Fixed, bounded, cached service-range queries with configurable metric/label
-  profiles are delivered (see "Delivered foundations"); #4 covers finishing
-  the configurable ASP.NET Core schema's remaining validation defects and #7
-  covers managed Prometheus identity/token refresh. Remaining here: broader
-  label/dimension support for future runtime modules and recording-rule
-  guidance for keeping Beholdr's own queries cheap — not metric ingestion,
-  storage, or a general query language, which stay out of scope per #24.
+  profiles are delivered (see "Delivered foundations"). Managed-Prometheus
+  identity and token refresh is folded into the auth-strategy work in
+  [#9](https://github.com/BeholdrApp/Beholdr/issues/9). Remaining here: broader label/dimension support and
+  recording-rule guidance for keeping Beholdr's own queries cheap — not a
+  general query language, which stays out of scope per [#1](https://github.com/BeholdrApp/Beholdr/issues/1) and
+  [#8](https://github.com/BeholdrApp/Beholdr/issues/8).
 
 - [ ] **Build a dashboard and exploration layer.** Add composable dashboards,
   panels, variables, annotations, sharing/export, provisioning as code,
   permissions, and a metric/log/trace explorer scoped to the fixed queries
   Beholdr already knows how to run safely — not ad-hoc or arbitrary backend
-  queries, which #24 lists as a non-goal before v1.
+  queries, which remain a non-goal per [#1](https://github.com/BeholdrApp/Beholdr/issues/1).
 
-- [ ] **Build alerting and incident response.** Add alert rules, evaluation and
-  deduplication, silences, routing/escalation, notification integrations,
-  alert history, runbook links, and SLO/error-budget alerts. Test delivery and
-  failure behavior end to end.
+- [ ] **Build alerting and incident response** — now scoped as `omen`:
+  [#20](https://github.com/BeholdrApp/Beholdr/issues/20) intake, [#21](https://github.com/BeholdrApp/Beholdr/issues/21) entity resolution, [#22](https://github.com/BeholdrApp/Beholdr/issues/22) delivery
+  adapters, [#23](https://github.com/BeholdrApp/Beholdr/issues/23) durable notification log, [#24](https://github.com/BeholdrApp/Beholdr/issues/24) the
+  alert/incident boundary.
 
 - [ ] **Build logs and trace correlation.** Add indexed log ingestion/search
   with retention controls, distributed trace storage/search, service maps,
@@ -230,10 +242,11 @@ proposal to revisit it.
   isolation, and secret-management policies before accepting multiple users or
   clusters.
 
-- [ ] **Support multi-cluster and lifecycle management.** Provide a secure
-  agent/collector deployment model, central control plane or federation,
-  upgrades, version compatibility, configuration-as-code, health reporting,
-  and cost/usage accounting.
+- [ ] **Support multi-cluster and lifecycle management.** The agent is
+  [stalkr](https://github.com/BeholdrApp/stalkr); deployment topology is
+  [#13](https://github.com/BeholdrApp/Beholdr/issues/13) and version compatibility is
+  [stalkr#3](https://github.com/BeholdrApp/stalkr/issues/3). Remaining here:
+  configuration-as-code, health reporting, and cost/usage accounting.
 
 ## P2 — high-value differentiators
 

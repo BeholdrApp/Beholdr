@@ -83,10 +83,15 @@ history comes from your Prometheus instance.
 ## Where the project is heading
 
 The next steps are to make the current observer dependable for production, then
-add log and trace exploration and connect those signals to service health.
-Notifications, built-in authentication, and Beholdr's own durable storage are
-not available today. See the [production backlog](PRODUCTION_BACKLOG.md) for
-remaining work and priorities.
+grow it into a modular platform: `gaze` for OTLP ingestion, `lair` for pluggable
+storage and query, `omen` for alerting, and
+[stalkr](https://github.com/BeholdrApp/stalkr) as the in-cluster agent, with
+[net-spectatr](https://github.com/BeholdrApp/net-spectatr) instrumenting .NET
+applications. Notifications, built-in authentication, and Beholdr's own durable
+storage are not available today.
+
+See the [roadmap](ROADMAP.md) for the architecture and sequencing, and the
+[production backlog](PRODUCTION_BACKLOG.md) for remaining work and priorities.
 
 ## Working on Beholdr
 
