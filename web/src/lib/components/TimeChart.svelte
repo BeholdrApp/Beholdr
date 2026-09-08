@@ -1,0 +1,74 @@
+<script lang="ts">
+  import type { Point } from "$lib/types.js";
+  import { fmtTime, fmtTimeWithDate } from "$lib/format.js";
+  import { areaPath, linePath, makeXScale, maxValue, spansMultipleDays, timeExtent } from "$lib/chartMath.js";
+
+  type Line = { key: string; label: string; color: string };
+  let {
+    data = [],
+    lines,
+    unit = "",
+    height = 220,
+  }: { data: Point[]; lines: Line[]; unit?: string; height?: number } = $props();
+
+  const W = 820;
+  const padL = 40, padR = 12, padT = 12, padB = 22;
+
+  const maxY = $derived.by(() => {
+    const m = maxValue(data, lines.map((l) => l.key));
+    if (unit === "%") return Math.max(100, m * 1.15);
+    return m <= 0 ? 1 : m * 1.15;
+  });
+
+  const { minT, maxT } = $derived(timeExtent(data));
+  const x = $derived(makeXScale(minT, maxT, padL, W - padR));
+  const y = (v: number) =>
+    padT + (1 - v / maxY) * (height - padT - padB);
+
+  const multiDay = $derived(spansMultipleDays(minT, maxT));
+  const fmtAxisTime = $derived(multiDay ? fmtTimeWithDate : fmtTime);
+
+  const ticks = $derived([0, 0.25, 0.5, 0.75, 1].map((f) => f * maxY));
+  const fmtY = (v: number) => (unit === "%" ? `${Math.round(v)}%` : v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${Math.round(v)}`);
+</script>
+
+<div class="rounded-2xl border border-white/5 bg-slate-900/60 p-4">
+  <div class="mb-2 flex flex-wrap gap-4">
+    {#each lines as l}
+      <div class="flex items-center gap-1.5 text-xs text-slate-300">
+        <span class="inline-block h-2.5 w-2.5 rounded-full" style="background:{l.color}"></span>{l.label}
+      </div>
+    {/each}
+  </div>
+
+  {#if data.length === 0}
+    <div class="flex items-center justify-center text-sm text-slate-500" style="height:{height}px">
+      collecting history…
+    </div>
+  {:else}
+    <svg viewBox="0 0 {W} {height}" class="w-full" style="height:{height}px" preserveAspectRatio="none">
+      <defs>
+        {#each lines as l}
+          <linearGradient id="grad-{l.key}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color={l.color} stop-opacity="0.35" />
+            <stop offset="100%" stop-color={l.color} stop-opacity="0" />
+          </linearGradient>
+        {/each}
+      </defs>
+
+      {#each ticks as t}
+        <line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="#1e293b" stroke-width="1" />
+        <text x="4" y={y(t) + 3} font-size="10" fill="#64748b">{fmtY(t)}</text>
+      {/each}
+
+      {#each lines as l}
+        <path d={areaPath(data, l.key, x, y)} fill="url(#grad-{l.key})" />
+        <path d={linePath(data, l.key, x, y)} fill="none" stroke={l.color} stroke-width="2" vector-effect="non-scaling-stroke" />
+      {/each}
+    </svg>
+    <div class="mt-1 flex justify-between text-[10px] text-slate-500">
+      <span>{fmtAxisTime(data[0].t)}</span>
+      <span>{fmtAxisTime(data[data.length - 1].t)}</span>
+    </div>
+  {/if}
+</div>
