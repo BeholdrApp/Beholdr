@@ -31,15 +31,25 @@
     <StatCard label="Microservices" value={n.workloads.length} />
     <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
       <div class="text-xs font-medium uppercase tracking-wide text-slate-400">CPU</div>
-      <div class="mt-1.5 text-3xl font-semibold tabular-nums">{n.cpu_pct}%</div>
-      <div class="mt-1 text-xs text-slate-400">{fmtCpu(n.cpu_used)} / {fmtCpu(n.cpu_capacity)}</div>
-      <div class="mt-3"><UsageBar pct={n.cpu_pct} /></div>
+      {#if n.metrics_missing}
+        <div class="mt-1.5 text-3xl font-semibold text-slate-500" title="No usage sample for this node — not a measurement of zero">—</div>
+        <div class="mt-1 text-xs text-slate-400">capacity {fmtCpu(n.cpu_capacity)}</div>
+      {:else}
+        <div class="mt-1.5 text-3xl font-semibold tabular-nums">{n.cpu_pct}%</div>
+        <div class="mt-1 text-xs text-slate-400">{fmtCpu(n.cpu_used)} / {fmtCpu(n.cpu_capacity)}</div>
+        <div class="mt-3"><UsageBar pct={n.cpu_pct} /></div>
+      {/if}
     </div>
     <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
       <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Memory</div>
-      <div class="mt-1.5 text-3xl font-semibold tabular-nums">{n.mem_pct}%</div>
-      <div class="mt-1 text-xs text-slate-400">{fmtMem(n.mem_used)} / {fmtMem(n.mem_capacity)}</div>
-      <div class="mt-3"><UsageBar pct={n.mem_pct} /></div>
+      {#if n.metrics_missing}
+        <div class="mt-1.5 text-3xl font-semibold text-slate-500" title="No usage sample for this node — not a measurement of zero">—</div>
+        <div class="mt-1 text-xs text-slate-400">capacity {fmtMem(n.mem_capacity)}</div>
+      {:else}
+        <div class="mt-1.5 text-3xl font-semibold tabular-nums">{n.mem_pct}%</div>
+        <div class="mt-1 text-xs text-slate-400">{fmtMem(n.mem_used)} / {fmtMem(n.mem_capacity)}</div>
+        <div class="mt-3"><UsageBar pct={n.mem_pct} /></div>
+      {/if}
     </div>
   </div>
 
@@ -66,8 +76,12 @@
             <td class="px-4 py-3 font-mono text-[12px]">{p.name}</td>
             <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/microservices/{p.namespace}/{p.workload}">{p.workload}</a></td>
             <td class="px-4 py-3"><Pill tone={p.phase === "Running" ? "ok" : "warn"}>{p.phase}</Pill></td>
-            <td class="px-4 py-3 tabular-nums">{fmtCpu(p.cpu_used)}</td>
-            <td class="px-4 py-3 tabular-nums">{fmtMem(p.mem_used)}</td>
+            <td class="px-4 py-3 tabular-nums">
+              {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtCpu(p.cpu_used)}{/if}
+            </td>
+            <td class="px-4 py-3 tabular-nums">
+              {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtMem(p.mem_used)}{/if}
+            </td>
             <td class="px-4 py-3 tabular-nums">{p.restarts}</td>
           </tr>
         {/each}

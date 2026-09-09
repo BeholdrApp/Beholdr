@@ -23,8 +23,6 @@ type Client struct {
 	metrics    *metricsclient.Clientset
 	namespaces []string
 	log        *slog.Logger
-
-	MetricsAvailable bool
 }
 
 // New builds a client. mode is "auto" | "in-cluster" | "kubeconfig".
@@ -41,7 +39,7 @@ func New(mode, kubeconfig string, namespaces []string, log *slog.Logger) (*Clien
 	if err != nil {
 		return nil, fmt.Errorf("metrics clientset: %w", err)
 	}
-	return &Client{cs: cs, metrics: mc, namespaces: namespaces, log: log, MetricsAvailable: true}, nil
+	return &Client{cs: cs, metrics: mc, namespaces: namespaces, log: log}, nil
 }
 
 func restConfig(mode, kubeconfig string, log *slog.Logger) (*rest.Config, error) {
@@ -160,13 +158,16 @@ func (c *Client) HPAs(ctx context.Context) ([]autoscalingv1.HorizontalPodAutosca
 
 type Usage struct{ CPUMilli, MemBytes int64 }
 
-func (c *Client) NodeMetrics(ctx context.Context) map[string]Usage {
+// NodeMetrics reports per-node usage. The error is returned rather than
+// recorded on the client: availability is a property of a single read, not
+// durable state, so one failure must not outlive the collection that saw it.
+// On error the map is empty and the caller decides how to present the gap —
+// it must not be mistaken for measured zeros.
+func (c *Client) NodeMetrics(ctx context.Context) (map[string]Usage, error) {
 	out := map[string]Usage{}
 	l, err := c.metrics.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		c.MetricsAvailable = false
-		c.log.Warn("node metrics unavailable (metrics-server?)", "err", err)
-		return out
+		return out, fmt.Errorf("node metrics unavailable (metrics-server?): %w", err)
 	}
 	for _, m := range l.Items {
 		out[m.Name] = Usage{
@@ -174,17 +175,17 @@ func (c *Client) NodeMetrics(ctx context.Context) map[string]Usage {
 			MemBytes: m.Usage.Memory().Value(),
 		}
 	}
-	return out
+	return out, nil
 }
 
-// PodMetrics keys by "namespace/name", summed over containers.
-func (c *Client) PodMetrics(ctx context.Context) map[string]Usage {
+// PodMetrics keys by "namespace/name", summed over containers. Like
+// NodeMetrics, a failed read is reported as an error instead of being latched
+// onto the client.
+func (c *Client) PodMetrics(ctx context.Context) (map[string]Usage, error) {
 	out := map[string]Usage{}
 	l, err := c.metrics.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
 	if err != nil {
-		c.MetricsAvailable = false
-		c.log.Warn("pod metrics unavailable (metrics-server?)", "err", err)
-		return out
+		return out, fmt.Errorf("pod metrics unavailable (metrics-server?): %w", err)
 	}
 	for _, m := range l.Items {
 		var u Usage
@@ -194,5 +195,5 @@ func (c *Client) PodMetrics(ctx context.Context) map[string]Usage {
 		}
 		out[m.Namespace+"/"+m.Name] = u
 	}
-	return out
+	return out, nil
 }

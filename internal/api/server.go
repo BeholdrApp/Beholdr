@@ -112,16 +112,20 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 
 // health is a rich, always-200 status view for the UI: it reports the same
 // readiness signal as /ready plus metrics availability, without the 503 that
-// would make a naive fetch() throw.
+// would make a naive fetch() throw. metrics carries the per-read detail so the
+// UI can distinguish "metrics-server is down" from "some pods have no sample
+// yet" — both of which otherwise look like usage of zero.
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	hs := s.col.Health()
+	snap := s.col.Snapshot()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                true,
 		"ready":             hs.Ready,
 		"last_success":      hs.LastSuccess,
 		"last_error":        hs.LastError,
 		"last_error_at":     hs.LastErrorAt,
-		"metrics_available": s.col.Snapshot().MetricsAvailable,
+		"metrics_available": snap.MetricsAvailable,
+		"metrics":           snap.Metrics,
 	})
 }
 
@@ -133,6 +137,7 @@ func (s *Server) cluster(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"updated_at":        snap.UpdatedAt,
 		"metrics_available": snap.MetricsAvailable,
+		"metrics":           snap.Metrics,
 		"cluster":           snap.Cluster,
 		"history":           s.col.History.Get("cluster"),
 	})
@@ -149,7 +154,9 @@ func (s *Server) nodes(w http.ResponseWriter, r *http.Request) {
 	for i := range nodes {
 		nodes[i].Pods = nil
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"updated_at": snap.UpdatedAt, "nodes": nodes})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"updated_at": snap.UpdatedAt, "metrics": snap.Metrics, "nodes": nodes,
+	})
 }
 
 func (s *Server) nodeDetail(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +182,8 @@ func (s *Server) microservices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"updated_at": snap.UpdatedAt, "microservices": snap.Microservices,
+		"updated_at": snap.UpdatedAt, "metrics": snap.Metrics,
+		"microservices": snap.Microservices,
 	})
 }
 

@@ -39,7 +39,12 @@ Deployment, configuration, API, and development reference. For the project goal 
   memory/limit usage, and failing pods.
 
 > Prerequisite: **metrics-server** must be installed for live CPU/memory. Without
-> it, topology and replica data still work but usage reads 0 (the UI shows a banner).
+> it, topology and replica data still work, and the UI reports usage as unknown
+> rather than as zero. Availability is re-derived on every collection, so
+> Beholdr recovers on its own once metrics-server comes back — no restart
+> needed. Two states are reported separately: *unavailable* (the metrics API
+> did not answer) and *partial* (it answered, but had no sample for some node
+> or pod, typically one scheduled since the last scrape).
 
 ## Layout
 
@@ -60,7 +65,7 @@ deploy/k8s/             plain-manifest equivalent
 ```
 GET /live                                 liveness: process can serve HTTP (no cluster dependency)
 GET /ready                                readiness: 200 once a recent collection has succeeded, 503 otherwise
-GET /api/health                           rich status for the UI (always 200): ready, last_success, last_error, metrics_available
+GET /api/health                           rich status for the UI (always 200): ready, last_success, last_error, metrics_available, metrics
 GET /api/integrations                     configured/reachable state for external telemetry systems
 GET /api/cluster                          cluster totals + history
 GET /api/nodes                            all nodes

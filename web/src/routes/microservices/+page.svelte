@@ -1,10 +1,11 @@
 <script lang="ts">
   import { poll } from "$lib/poll.svelte.js";
-  import type { Microservice } from "$lib/types.js";
+  import type { MetricsStatus, Microservice } from "$lib/types.js";
   import { fmtCpu, fmtMem } from "$lib/format.js";
   import Pill from "$lib/components/Pill.svelte";
+  import MetricsNotice from "$lib/components/MetricsNotice.svelte";
 
-  type Resp = { updated_at: number; microservices: Microservice[] };
+  type Resp = { updated_at: number; metrics: MetricsStatus; microservices: Microservice[] };
   const q = poll<Resp>("/api/microservices", 5000);
   let filter = $state("");
 
@@ -23,6 +24,8 @@
   <p class="mt-2 text-sm text-slate-400">Loading…</p>
 {:else}
   <p class="mt-1 text-xs text-slate-400">{q.data.microservices.length} workloads · scaling, autoscaling and per-service utilization</p>
+
+  <MetricsNotice metrics={q.data.metrics} scope="workloads" />
 
   <input
     placeholder="filter by name / namespace…"
@@ -53,9 +56,15 @@
             <td class="px-4 py-3 text-xs text-slate-400">
               {#if m.hpa}HPA {m.hpa.min}–{m.hpa.max}{m.hpa.target_cpu_pct ? ` @${m.hpa.target_cpu_pct}%` : ""}{:else}—{/if}
             </td>
-            <td class="px-4 py-3 tabular-nums">{fmtCpu(m.cpu_used)}</td>
-            <td class="px-4 py-3 tabular-nums">{fmtMem(m.mem_used)}</td>
-            <td class="px-4 py-3 tabular-nums">{m.cpu_util_pct != null ? `${m.cpu_util_pct}%` : "—"}</td>
+            <td class="px-4 py-3 tabular-nums" title={m.metrics_missing ? "Some pods have no usage sample — this is an undercount" : ""}>
+              {fmtCpu(m.cpu_used)}{#if m.metrics_missing}<span class="text-slate-500">+</span>{/if}
+            </td>
+            <td class="px-4 py-3 tabular-nums" title={m.metrics_missing ? "Some pods have no usage sample — this is an undercount" : ""}>
+              {fmtMem(m.mem_used)}{#if m.metrics_missing}<span class="text-slate-500">+</span>{/if}
+            </td>
+            <td class="px-4 py-3 tabular-nums">
+              {m.cpu_util_pct != null && !m.metrics_missing ? `${m.cpu_util_pct}%` : "—"}
+            </td>
             <td class="px-4 py-3 text-slate-400">{m.nodes.length}</td>
             <td class="px-4 py-3">{#if m.restarts > 0}<Pill tone="warn">{m.restarts}</Pill>{:else}{m.restarts}{/if}</td>
           </tr>

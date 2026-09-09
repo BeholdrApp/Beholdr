@@ -47,8 +47,8 @@ func (f *fakeSource) DaemonSets(context.Context) ([]appsv1.DaemonSet, error) { r
 func (f *fakeSource) HPAs(context.Context) ([]autoscalingv1.HorizontalPodAutoscaler, error) {
 	return nil, nil
 }
-func (f *fakeSource) NodeMetrics(context.Context) map[string]k8s.Usage { return nil }
-func (f *fakeSource) PodMetrics(context.Context) map[string]k8s.Usage  { return nil }
+func (f *fakeSource) NodeMetrics(context.Context) (map[string]k8s.Usage, error) { return nil, nil }
+func (f *fakeSource) PodMetrics(context.Context) (map[string]k8s.Usage, error)  { return nil, nil }
 
 // newTestServer builds a Server around a collector that has run zero or one
 // collection cycles. Run(ctx) with an already-cancelled ctx still primes
@@ -57,7 +57,7 @@ func (f *fakeSource) PodMetrics(context.Context) map[string]k8s.Usage  { return 
 func newTestServer(t *testing.T, corsOrigins []string, collected bool, srcErr error) *Server {
 	t.Helper()
 	src := &fakeSource{err: srcErr}
-	col := collect.New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	col := collect.New(src, time.Hour, 5*time.Second, 10, testLogger())
 	if collected {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -71,7 +71,7 @@ func newTestServer(t *testing.T, corsOrigins []string, collected bool, srcErr er
 // nil-monitor shortcut.
 func newTestServerWithMonitor(t *testing.T, cfg integrations.Config) *Server {
 	t.Helper()
-	col := collect.New(&fakeSource{}, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	col := collect.New(&fakeSource{}, time.Hour, 5*time.Second, 10, testLogger())
 	mon := integrations.New(cfg, testLogger())
 	mon.Check(context.Background())
 	return NewServer(col, mon, nil, nil, testLogger())
@@ -132,6 +132,27 @@ func TestHealthAlways200AndReportsError(t *testing.T) {
 	}
 	if errMsg, _ := body["last_error"].(string); errMsg == "" {
 		t.Error("want last_error to be surfaced in the health payload")
+	}
+}
+
+// The UI needs to tell "metrics-server is down" apart from "some pods have
+// no sample yet"; both render usage as zero, so a single boolean is not
+// enough to describe either honestly.
+func TestHealthReportsMetricsDetail(t *testing.T) {
+	s := newTestServer(t, nil, true, nil)
+	w := do(s, http.MethodGet, "/api/health", "")
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	metrics, ok := body["metrics"].(map[string]any)
+	if !ok {
+		t.Fatalf("want a metrics object in the health payload, got %v", body["metrics"])
+	}
+	for _, k := range []string{"nodes_available", "pods_available", "nodes_missing", "pods_missing"} {
+		if _, present := metrics[k]; !present {
+			t.Errorf("want %q reported in the metrics status", k)
+		}
 	}
 }
 
@@ -321,7 +342,7 @@ func newServiceMetricsServer(t *testing.T, querier *apiMetricsQuerier) *Server {
 			pod("production", "video-gateway-7d9f8c6b54-zzzzz", "video-gateway"),
 		},
 	}
-	col := collect.New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	col := collect.New(src, time.Hour, 5*time.Second, 10, testLogger())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	col.Run(ctx)
@@ -374,7 +395,7 @@ func TestMicroserviceDetailEndpoint(t *testing.T) {
 			podRS("production", "video-7d9f8c6b54-b1n4q", "video-7d9f8c6b54"),
 		},
 	}
-	col := collect.New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	col := collect.New(src, time.Hour, 5*time.Second, 10, testLogger())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	col.Run(ctx)
@@ -434,7 +455,7 @@ func TestMicroserviceDetailDoesNotMixPodsAcrossKinds(t *testing.T) {
 			},
 		},
 	}
-	col := collect.New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	col := collect.New(src, time.Hour, 5*time.Second, 10, testLogger())
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	col.Run(ctx)

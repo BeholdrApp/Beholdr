@@ -75,6 +75,14 @@ labeled preview may still ship early.
   release build (see below), with the Go build toolchain and frontend build
   toolchain deliberately upgraded rather than accepting `npm audit fix
   --force`'s downgrade suggestions.
+- [x] Correct collector metric availability under failure
+  ([#5](https://github.com/BeholdrApp/Beholdr/issues/5)): availability is
+  derived per collection and carried in the snapshot instead of latched onto
+  the shared `k8s.Client`, which removes the data race between the collector
+  goroutine and HTTP handlers and lets a transient metrics-server outage
+  recover without a restart. Unavailable and partial data are now distinct
+  states, per-node/pod/workload gaps are flagged, and the UI renders unmeasured
+  usage as unknown rather than as zero.
 
 ## Dependency and toolchain vulnerability triage (2026-09-05)
 
@@ -113,14 +121,6 @@ labeled preview may still ship early.
   still open — see "Finish automated quality gates" below.
 
 ## P0 — remaining release blockers
-
-- [ ] **Make collector health and metric availability correct under failure** ([#5](https://github.com/BeholdrApp/Beholdr/issues/5))**.**
-  Synchronize client state or return availability/errors as part of each
-  collection result; recover to “available” after a later successful metrics
-  read; show partial-data and stale-data states in the UI.  
-  _Why:_ `MetricsAvailable` is read and written from concurrent goroutines,
-  becomes permanently false after one error, and current zero values are
-  indistinguishable from missing metrics.
 
 - [ ] **Finish supply-chain hardening** ([#6](https://github.com/BeholdrApp/Beholdr/issues/6))**.** Dependency locks and deterministic
   builds are in place. Pin base images and GitHub Actions by digest/immutable
