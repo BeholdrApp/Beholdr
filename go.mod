@@ -2,6 +2,8 @@ module github.com/beholdrapp/beholdr
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	k8s.io/api v0.30.2
 	k8s.io/apimachinery v0.30.2

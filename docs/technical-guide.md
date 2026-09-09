@@ -309,13 +309,42 @@ go test ./... -race -cover
 cd web && npm run check   # svelte-check (types)
 ```
 
-`.github/workflows/ci.yml` runs both, plus a frontend production build and a
-container build, on every pull request. The container job loads the image it
-builds and scans it with Trivy, so the check covers the artifact that would
-ship — including the Go standard library compiled into the binary, which
-scanning the module graph alone does not reach. The gate fails on HIGH or
-CRITICAL findings that have a fix available; unfixed findings are printed but
-do not block, so an unfixable upstream CVE cannot wedge every pull request.
+`.github/workflows/ci.yml` runs these on every pull request, in four jobs:
+
+| Job | Gates |
+| --- | --- |
+| Backend (Go) | build, vet, gofmt, toolchain-drift guard, race tests, coverage floor, `govulncheck` |
+| Frontend (SvelteKit) | `svelte-check`, vitest, production build, `npm audit` (report only) |
+| Infrastructure as code | `terraform fmt`/`validate`, `kubeconform` on the manifests |
+| Container build | image build, Trivy vulnerability scan, Trivy license scan |
+
+**Scanning what ships.** The container job loads the image it builds and scans
+it, so the check covers the artifact that would ship — including the Go
+standard library compiled into the binary, which scanning the module graph
+alone does not reach. The gate fails on HIGH or CRITICAL findings that have a
+fix available; unfixed findings are printed but do not block, so an unfixable
+upstream CVE cannot wedge every pull request. `govulncheck` complements it from
+the other side: Trivy reports what is *present* in the artifact, `govulncheck`
+reports what the code actually *reaches*.
+
+**Toolchain drift.** `go.mod`'s `toolchain` directive and the `golang` base
+image in the `Dockerfile` pin the same patch release, and CI asserts they still
+match. This is load-bearing, not tidiness: `govulncheck` reports 27 reachable
+standard-library advisories against go1.25.1 and zero against the go1.25.14 the
+release image builds with. A drifted pair means CI validates a toolchain the
+release never uses. Change both together.
+
+**Coverage.** The floor lives in `.github/coverage-threshold` and CI fails
+below it. Raise it as coverage improves — that ratchet is the regression guard.
+A floor was chosen over a diff against the base branch because it needs no
+history and no external service, and fails identically for everyone.
+
+**`npm audit` is deliberately not a gate.** Every frontend dependency is a
+`devDependency` — the shipped SPA is compiled output with no runtime dependency
+tree — so `npm audit --omit=dev` has nothing to audit and would pass
+vacuously, while the full graph is exactly the dev-toolchain surface the
+severity policy says to track rather than block on. What actually ships is
+gated by the image scan.
 
 ## Build & push
 

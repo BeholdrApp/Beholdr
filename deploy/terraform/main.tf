@@ -33,25 +33,25 @@ locals {
   # omitted so Beholdr applies its own default rather than being handed an
   # empty string it would have to interpret.
   service_health_env = {
-    BEHOLDR_SERVICE_HTTP_REQUESTS_METRIC   = var.service_http_requests_metric
-    BEHOLDR_SERVICE_HTTP_ERRORS_METRIC     = var.service_http_errors_metric
-    BEHOLDR_SERVICE_HTTP_STATUS_LABEL      = var.service_http_status_label
-    BEHOLDR_SERVICE_APP_NAMESPACE_LABEL    = var.service_app_namespace_label
-    BEHOLDR_SERVICE_APP_SERVICE_LABEL      = var.service_app_service_label
-    BEHOLDR_SERVICE_APP_POD_LABEL          = var.service_app_pod_label
-    BEHOLDR_SERVICE_KUBE_NAMESPACE_LABEL   = var.service_kube_namespace_label
-    BEHOLDR_SERVICE_KUBE_POD_LABEL         = var.service_kube_pod_label
-    BEHOLDR_SERVICE_CPU_BASIS              = var.service_cpu_basis
-    BEHOLDR_SERVICE_ERROR_RATE_WARNING     = try(tostring(var.service_thresholds.error_rate_warning), "")
-    BEHOLDR_SERVICE_ERROR_RATE_CRITICAL    = try(tostring(var.service_thresholds.error_rate_critical), "")
-    BEHOLDR_SERVICE_ERROR_INCREASE_WARNING = try(tostring(var.service_thresholds.error_increase_warning), "")
+    BEHOLDR_SERVICE_HTTP_REQUESTS_METRIC    = var.service_http_requests_metric
+    BEHOLDR_SERVICE_HTTP_ERRORS_METRIC      = var.service_http_errors_metric
+    BEHOLDR_SERVICE_HTTP_STATUS_LABEL       = var.service_http_status_label
+    BEHOLDR_SERVICE_APP_NAMESPACE_LABEL     = var.service_app_namespace_label
+    BEHOLDR_SERVICE_APP_SERVICE_LABEL       = var.service_app_service_label
+    BEHOLDR_SERVICE_APP_POD_LABEL           = var.service_app_pod_label
+    BEHOLDR_SERVICE_KUBE_NAMESPACE_LABEL    = var.service_kube_namespace_label
+    BEHOLDR_SERVICE_KUBE_POD_LABEL          = var.service_kube_pod_label
+    BEHOLDR_SERVICE_CPU_BASIS               = var.service_cpu_basis
+    BEHOLDR_SERVICE_ERROR_RATE_WARNING      = try(tostring(var.service_thresholds.error_rate_warning), "")
+    BEHOLDR_SERVICE_ERROR_RATE_CRITICAL     = try(tostring(var.service_thresholds.error_rate_critical), "")
+    BEHOLDR_SERVICE_ERROR_INCREASE_WARNING  = try(tostring(var.service_thresholds.error_increase_warning), "")
     BEHOLDR_SERVICE_ERROR_INCREASE_CRITICAL = try(tostring(var.service_thresholds.error_increase_critical), "")
-    BEHOLDR_SERVICE_CPU_WARNING            = try(tostring(var.service_thresholds.cpu_warning), "")
-    BEHOLDR_SERVICE_CPU_CRITICAL           = try(tostring(var.service_thresholds.cpu_critical), "")
-    BEHOLDR_SERVICE_MEMORY_WARNING         = try(tostring(var.service_thresholds.memory_warning), "")
-    BEHOLDR_SERVICE_MEMORY_CRITICAL        = try(tostring(var.service_thresholds.memory_critical), "")
-    BEHOLDR_SERVICE_FAILING_PODS_WARNING   = try(tostring(var.service_thresholds.failing_pods_warning), "")
-    BEHOLDR_SERVICE_FAILING_PODS_CRITICAL  = try(tostring(var.service_thresholds.failing_pods_critical), "")
+    BEHOLDR_SERVICE_CPU_WARNING             = try(tostring(var.service_thresholds.cpu_warning), "")
+    BEHOLDR_SERVICE_CPU_CRITICAL            = try(tostring(var.service_thresholds.cpu_critical), "")
+    BEHOLDR_SERVICE_MEMORY_WARNING          = try(tostring(var.service_thresholds.memory_warning), "")
+    BEHOLDR_SERVICE_MEMORY_CRITICAL         = try(tostring(var.service_thresholds.memory_critical), "")
+    BEHOLDR_SERVICE_FAILING_PODS_WARNING    = try(tostring(var.service_thresholds.failing_pods_warning), "")
+    BEHOLDR_SERVICE_FAILING_PODS_CRITICAL   = try(tostring(var.service_thresholds.failing_pods_critical), "")
   }
 
   # In edge mode the public hostname is already HTTPS-only at the terminator

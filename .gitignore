@@ -243,3 +243,6 @@ deploy/terraform/crash.log
 !internal/webui/dist/
 internal/webui/dist/*
 !internal/webui/dist/index.html
+
+# Coverage profile produced by `go test -coverprofile` and by CI.
+coverage.out

@@ -75,6 +75,16 @@ labeled preview may still ship early.
   release build (see below), with the Go build toolchain and frontend build
   toolchain deliberately upgraded rather than accepting `npm audit fix
   --force`'s downgrade suggestions.
+- [x] Automated quality gates
+  ([#7](https://github.com/BeholdrApp/Beholdr/issues/7)): `govulncheck` and a
+  Trivy license scan enforced in CI, Terraform `fmt`/`validate` and
+  `kubeconform` validation of the deployment manifests, a coverage floor that
+  fails on regression, and the frontend vitest suite — which existed but had
+  never been wired into CI. Also aligned the CI Go toolchain with the release
+  image via a `toolchain` directive and a drift guard: `govulncheck` reports 27
+  reachable standard-library advisories against go1.25.1 and zero against the
+  go1.25.14 the image builds with, so the scan is only meaningful once the two
+  match.
 - [x] Supply-chain hardening
   ([#6](https://github.com/BeholdrApp/Beholdr/issues/6)): every base image
   pinned by digest and every GitHub Action by commit SHA (a floating tag
@@ -133,15 +143,13 @@ labeled preview may still ship early.
 
 ## P0 — remaining release blockers
 
-- [ ] **Finish automated quality gates** ([#7](https://github.com/BeholdrApp/Beholdr/issues/7))**.** Backend/frontend tests and builds plus
-  the container build run on pull requests. Add IaC validation, vulnerability
-  and license checks, publish coverage, and fail on coverage regressions.
-
-- [ ] **Run a security and scale validation against a representative cluster.**
+- [ ] **Run a security and scale validation against a representative cluster**
+  ([#29](https://github.com/BeholdrApp/Beholdr/issues/29))**.**
   Validate least-privilege RBAC, namespace isolation, API response size,
   collection duration, API-server request rate, memory growth, and UI behavior
   at the target pod/node/workload counts. Define and test a supported scale
-  envelope before launch.
+  envelope before launch. This is the only P0 that cannot be closed by a code
+  change — it needs a real cluster and a recorded result.
 
 ## P1 — production-ready observer
 
