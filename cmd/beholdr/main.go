@@ -35,10 +35,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	col := collect.New(
-		client, cfg.PollInterval, cfg.RequestTimout, cfg.HistorySize,
-		func() bool { return client.MetricsAvailable }, log,
-	)
+	col := collect.New(client, cfg.PollInterval, cfg.RequestTimout, cfg.HistorySize, log)
 	integrationMonitor := integrations.New(integrations.Config{
 		PrometheusURL:         cfg.PrometheusURL,
 		PrometheusBearerToken: cfg.PrometheusBearerToken,

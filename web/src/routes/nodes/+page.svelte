@@ -1,11 +1,12 @@
 <script lang="ts">
   import { poll } from "$lib/poll.svelte.js";
-  import type { NodeInfo } from "$lib/types.js";
+  import type { MetricsStatus, NodeInfo } from "$lib/types.js";
   import { fmtMem } from "$lib/format.js";
   import UsageBar from "$lib/components/UsageBar.svelte";
   import Pill from "$lib/components/Pill.svelte";
+  import MetricsNotice from "$lib/components/MetricsNotice.svelte";
 
-  type Resp = { updated_at: number; nodes: NodeInfo[] };
+  type Resp = { updated_at: number; metrics: MetricsStatus; nodes: NodeInfo[] };
   const q = poll<Resp>("/api/nodes", 5000);
 </script>
 
@@ -17,6 +18,8 @@
   <p class="mt-2 text-sm text-slate-400">Loading…</p>
 {:else}
   <p class="mt-1 text-xs text-slate-400">{q.data.nodes.length} nodes · pods-per-node and per-node utilization</p>
+
+  <MetricsNotice metrics={q.data.metrics} scope="nodes" />
 
   <div class="mt-5 overflow-hidden rounded-2xl border border-white/5">
     <table class="w-full text-sm">
@@ -38,10 +41,18 @@
             <td class="px-4 py-3">{#each n.roles as r}<span class="mr-1"><Pill tone="muted">{r}</Pill></span>{/each}</td>
             <td class="px-4 py-3 tabular-nums">{n.pod_count}</td>
             <td class="min-w-40 px-4 py-3">
-              <div class="mb-1 text-xs text-slate-400">{n.cpu_pct}%</div><UsageBar pct={n.cpu_pct} />
+              {#if n.metrics_missing}
+                <span class="text-xs text-slate-500" title="No usage sample for this node">—</span>
+              {:else}
+                <div class="mb-1 text-xs text-slate-400">{n.cpu_pct}%</div><UsageBar pct={n.cpu_pct} />
+              {/if}
             </td>
             <td class="min-w-40 px-4 py-3">
-              <div class="mb-1 text-xs text-slate-400">{n.mem_pct}% · {fmtMem(n.mem_used)}</div><UsageBar pct={n.mem_pct} />
+              {#if n.metrics_missing}
+                <span class="text-xs text-slate-500" title="No usage sample for this node">—</span>
+              {:else}
+                <div class="mb-1 text-xs text-slate-400">{n.mem_pct}% · {fmtMem(n.mem_used)}</div><UsageBar pct={n.mem_pct} />
+              {/if}
             </td>
             <td class="px-4 py-3 text-xs text-slate-400">
               {n.workloads.length} · {n.workloads.slice(0, 3).join(", ")}{n.workloads.length > 3 ? "…" : ""}

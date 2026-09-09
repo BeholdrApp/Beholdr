@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -32,9 +33,11 @@ type fakeSource struct {
 	nodeUsage    map[string]k8s.Usage
 	podUsage     map[string]k8s.Usage
 
-	nodesErr error
-	podsErr  error
-	depsErr  error
+	nodesErr       error
+	podsErr        error
+	depsErr        error
+	nodeMetricsErr error
+	podMetricsErr  error
 }
 
 func (f *fakeSource) Nodes(context.Context) ([]corev1.Node, error) { return f.nodes, f.nodesErr }
@@ -51,8 +54,19 @@ func (f *fakeSource) DaemonSets(context.Context) ([]appsv1.DaemonSet, error) {
 func (f *fakeSource) HPAs(context.Context) ([]autoscalingv1.HorizontalPodAutoscaler, error) {
 	return f.hpas, nil
 }
-func (f *fakeSource) NodeMetrics(context.Context) map[string]k8s.Usage { return f.nodeUsage }
-func (f *fakeSource) PodMetrics(context.Context) map[string]k8s.Usage  { return f.podUsage }
+func (f *fakeSource) NodeMetrics(context.Context) (map[string]k8s.Usage, error) {
+	if f.nodeMetricsErr != nil {
+		return nil, f.nodeMetricsErr
+	}
+	return f.nodeUsage, nil
+}
+
+func (f *fakeSource) PodMetrics(context.Context) (map[string]k8s.Usage, error) {
+	if f.podMetricsErr != nil {
+		return nil, f.podMetricsErr
+	}
+	return f.podUsage, nil
+}
 
 func qty(s string) resource.Quantity { return resource.MustParse(s) }
 
@@ -111,7 +125,7 @@ func oneNodeOnePodFixture() *fakeSource {
 
 func TestCollectSuccessUpdatesSnapshotAndHealth(t *testing.T) {
 	src := oneNodeOnePodFixture()
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 
 	c.collect(context.Background())
 
@@ -144,7 +158,7 @@ func TestCollectSuccessUpdatesSnapshotAndHealth(t *testing.T) {
 func TestCollectFailureLeavesHealthNotReady(t *testing.T) {
 	src := oneNodeOnePodFixture()
 	src.nodesErr = errors.New("api-server unreachable")
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 
 	c.collect(context.Background())
 
@@ -162,7 +176,7 @@ func TestCollectFailureLeavesHealthNotReady(t *testing.T) {
 
 func TestCollectRecoversAfterFailure(t *testing.T) {
 	src := oneNodeOnePodFixture()
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 
 	src.podsErr = errors.New("timeout")
 	c.collect(context.Background())
@@ -186,7 +200,7 @@ func TestCollectRecoversAfterFailure(t *testing.T) {
 
 func TestHealthGoesStaleWithoutRecentSuccess(t *testing.T) {
 	src := oneNodeOnePodFixture()
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 	c.collect(context.Background())
 	if !c.Health().Ready {
 		t.Fatal("expected ready right after a successful collection")
@@ -203,21 +217,140 @@ func TestHealthGoesStaleWithoutRecentSuccess(t *testing.T) {
 	}
 }
 
-func TestMetricsAvailableReflectsCallback(t *testing.T) {
+// A failed metrics read must not outlive the collection that saw it: the
+// availability flag is derived per cycle, so a later successful read recovers
+// without a restart. The old shared-flag implementation latched false forever
+// and failed this test's third phase.
+func TestMetricsAvailabilityRecoversAfterFailure(t *testing.T) {
 	src := oneNodeOnePodFixture()
-	available := true
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return available }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 
 	c.collect(context.Background())
 	if !c.Snapshot().MetricsAvailable {
-		t.Fatal("want metrics available")
+		t.Fatal("want metrics available on a clean read")
 	}
 
-	available = false
+	src.nodeMetricsErr = errors.New("metrics-server unreachable")
 	c.collect(context.Background())
-	if c.Snapshot().MetricsAvailable {
-		t.Fatal("want metrics unavailable once the callback flips")
+	snap := c.Snapshot()
+	if snap.MetricsAvailable {
+		t.Fatal("want metrics unavailable while the node metrics read is failing")
 	}
+	if snap.Metrics.NodesAvailable {
+		t.Error("want nodes_available false")
+	}
+	if !snap.Metrics.PodsAvailable {
+		t.Error("want pods_available true: only the node read failed")
+	}
+	if snap.Metrics.Error == "" {
+		t.Error("want the read error reported for diagnostics")
+	}
+
+	src.nodeMetricsErr = nil
+	c.collect(context.Background())
+	if !c.Snapshot().MetricsAvailable {
+		t.Fatal("want metrics available again after a later successful read")
+	}
+	if got := c.Snapshot().Metrics.Error; got != "" {
+		t.Errorf("want the stale error cleared, got %q", got)
+	}
+}
+
+// A failed read leaves every object without a sample, and that must be
+// reported as missing rather than published as a measured zero.
+func TestFailedMetricsReadMarksEveryObjectMissing(t *testing.T) {
+	src := oneNodeOnePodFixture()
+	src.nodeMetricsErr = errors.New("boom")
+	src.podMetricsErr = errors.New("boom")
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
+	c.collect(context.Background())
+
+	snap := c.Snapshot()
+	if snap.Metrics.NodesMissing != 1 || snap.Metrics.PodsMissing != 1 {
+		t.Fatalf("want 1 node and 1 pod missing metrics, got %d/%d",
+			snap.Metrics.NodesMissing, snap.Metrics.PodsMissing)
+	}
+	if !snap.Cluster.MetricsMissing {
+		t.Error("want the cluster marked as missing metrics")
+	}
+	if !snap.Nodes[0].MetricsMissing {
+		t.Error("want the node marked as missing metrics")
+	}
+	if !snap.Pods[0].MetricsMissing {
+		t.Error("want the pod marked as missing metrics")
+	}
+	if !snap.Microservices[0].MetricsMissing {
+		t.Error("want the workload marked as missing metrics: its sum is an undercount")
+	}
+	if snap.Metrics.Partial() {
+		t.Error("a failed read is unavailable, not partial")
+	}
+}
+
+// The metrics API can answer without having a sample for every object — a
+// node or pod scheduled since the last scrape. That is partial data, not
+// unavailability, and zero usage for those objects is still not a
+// measurement.
+func TestPartialMetricsAreReportedSeparatelyFromUnavailability(t *testing.T) {
+	src := oneNodeOnePodFixture()
+	src.nodeUsage = map[string]k8s.Usage{}
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
+	c.collect(context.Background())
+
+	snap := c.Snapshot()
+	if !snap.MetricsAvailable {
+		t.Fatal("want metrics available: the read succeeded, it was just incomplete")
+	}
+	if !snap.Metrics.Partial() {
+		t.Fatal("want partial metrics reported")
+	}
+	if snap.Metrics.NodesMissing != 1 {
+		t.Errorf("want 1 node missing a sample, got %d", snap.Metrics.NodesMissing)
+	}
+	if snap.Metrics.PodsMissing != 0 {
+		t.Errorf("want pod metrics complete, got %d missing", snap.Metrics.PodsMissing)
+	}
+	if !snap.Nodes[0].MetricsMissing {
+		t.Error("want the unsampled node flagged so the UI does not render 0% as measured")
+	}
+	if snap.Pods[0].MetricsMissing {
+		t.Error("want the sampled pod not flagged")
+	}
+}
+
+// Availability used to live on the shared k8s client, written by the
+// collector goroutine and read by HTTP handlers with no synchronization. It
+// now travels inside the snapshot, which is guarded by the collector's mutex.
+// Under -race this fails on the old design and passes on the new one.
+func TestSnapshotIsRaceFreeAgainstConcurrentCollection(t *testing.T) {
+	src := oneNodeOnePodFixture()
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = c.Snapshot().MetricsAvailable
+				_ = c.Health()
+			}
+		}
+	}()
+	for i := range 50 {
+		if i%2 == 0 {
+			src.nodeMetricsErr = errors.New("flapping")
+		} else {
+			src.nodeMetricsErr = nil
+		}
+		c.collect(context.Background())
+	}
+	close(stop)
+	wg.Wait()
 }
 
 func TestWorkloadOf(t *testing.T) {
@@ -322,7 +455,7 @@ func TestStatefulSetAndDaemonSetReportAuthoritativeReplicas(t *testing.T) {
 		statefulSets: []appsv1.StatefulSet{sts},
 		daemonSets:   []appsv1.DaemonSet{ds},
 	}
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 	c.collect(context.Background())
 
 	msMap := map[string]Microservice{}
@@ -357,7 +490,7 @@ func TestZeroPodWorkloadStaysVisible(t *testing.T) {
 		Status:     appsv1.StatefulSetStatus{ReadyReplicas: 0},
 	}
 	src := &fakeSource{statefulSets: []appsv1.StatefulSet{sts}}
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 	c.collect(context.Background())
 
 	snap := c.Snapshot()
@@ -393,7 +526,7 @@ func TestSameNameDifferentKindWorkloadsDoNotCollide(t *testing.T) {
 		deployments:  []appsv1.Deployment{dep},
 		statefulSets: []appsv1.StatefulSet{sts},
 	}
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 	c.collect(context.Background())
 
 	snap := c.Snapshot()
@@ -437,7 +570,7 @@ func TestHPAMatchesTargetKind(t *testing.T) {
 		statefulSets: []appsv1.StatefulSet{sts},
 		hpas:         []autoscalingv1.HorizontalPodAutoscaler{hpa},
 	}
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 	c.collect(context.Background())
 
 	msMap := map[string]Microservice{}
@@ -462,7 +595,7 @@ func TestCronJobRunsCollapseIntoOneWorkload(t *testing.T) {
 		podOwnedBy("default", "backup-1758003600-def", "Job", "backup-1758003600"),
 	}
 	src := &fakeSource{pods: pods}
-	c := New(src, time.Hour, 5*time.Second, 10, func() bool { return true }, testLogger())
+	c := New(src, time.Hour, 5*time.Second, 10, testLogger())
 	c.collect(context.Background())
 
 	snap := c.Snapshot()

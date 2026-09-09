@@ -37,8 +37,8 @@ type Source interface {
 	StatefulSets(context.Context) ([]appsv1.StatefulSet, error)
 	DaemonSets(context.Context) ([]appsv1.DaemonSet, error)
 	HPAs(context.Context) ([]autoscalingv1.HorizontalPodAutoscaler, error)
-	NodeMetrics(context.Context) map[string]k8s.Usage
-	PodMetrics(context.Context) map[string]k8s.Usage
+	NodeMetrics(context.Context) (map[string]k8s.Usage, error)
+	PodMetrics(context.Context) (map[string]k8s.Usage, error)
 }
 
 type Collector struct {
@@ -59,23 +59,20 @@ type Collector struct {
 	lastSuccess time.Time
 	lastErr     error
 	lastErrAt   time.Time
-
-	metricsAvailable func() bool
 }
 
-func New(src Source, interval, timeout time.Duration, historySize int, metricsAvailable func() bool, log *slog.Logger) *Collector {
+func New(src Source, interval, timeout time.Duration, historySize int, log *slog.Logger) *Collector {
 	staleAfter := interval * 3
 	if staleAfter < 30*time.Second {
 		staleAfter = 30 * time.Second
 	}
 	return &Collector{
-		src:              src,
-		interval:         interval,
-		timeout:          timeout,
-		staleAfter:       staleAfter,
-		log:              log,
-		History:          NewHistory(historySize),
-		metricsAvailable: metricsAvailable,
+		src:        src,
+		interval:   interval,
+		timeout:    timeout,
+		staleAfter: staleAfter,
+		log:        log,
+		History:    NewHistory(historySize),
 	}
 }
 
@@ -166,13 +163,30 @@ func (c *Collector) collect(parent context.Context) {
 		return
 	}
 	hpas, _ := c.src.HPAs(ctx)
-	nodeUsage := c.src.NodeMetrics(ctx)
-	podUsage := c.src.PodMetrics(ctx)
+
+	// Metrics availability is derived from this cycle's reads alone. A failed
+	// read leaves the usage map empty and is reported through metrics; it is
+	// never latched onto shared state, so the next successful read recovers
+	// on its own.
+	var metrics MetricsStatus
+	nodeUsage, nodeMetricsErr := c.src.NodeMetrics(ctx)
+	if nodeMetricsErr != nil {
+		c.log.Warn("node metrics read failed", "err", nodeMetricsErr)
+		metrics.Error = nodeMetricsErr.Error()
+	}
+	metrics.NodesAvailable = nodeMetricsErr == nil
+	podUsage, podMetricsErr := c.src.PodMetrics(ctx)
+	if podMetricsErr != nil {
+		c.log.Warn("pod metrics read failed", "err", podMetricsErr)
+		metrics.Error = podMetricsErr.Error()
+	}
+	metrics.PodsAvailable = podMetricsErr == nil
 
 	ts := float64(time.Now().UnixNano()) / 1e9
 
-	nodeMap := buildNodes(nodes, nodeUsage)
-	podList, byNode, byMS := buildPods(pods, podUsage)
+	nodeMap, nodesMissing := buildNodes(nodes, nodeUsage)
+	podList, byNode, byMS, podsMissing := buildPods(pods, podUsage)
+	metrics.NodesMissing, metrics.PodsMissing = nodesMissing, podsMissing
 	msMap := buildMicroservices(deployments, statefulSets, daemonSets, hpas, byMS)
 
 	for name, n := range nodeMap {
@@ -184,6 +198,7 @@ func (c *Collector) collect(parent context.Context) {
 	}
 
 	cluster := buildCluster(nodeMap, podList, msMap)
+	cluster.MetricsMissing = nodesMissing > 0
 
 	// ---- history ----
 	c.History.Push("cluster", Point{
@@ -214,7 +229,8 @@ func (c *Collector) collect(parent context.Context) {
 	snap := Snapshot{
 		Ready:            true,
 		UpdatedAt:        ts,
-		MetricsAvailable: c.metricsAvailable(),
+		MetricsAvailable: metrics.Available(),
+		Metrics:          metrics,
 		Cluster:          cluster,
 		Nodes:            sortedNodes(nodeMap),
 		Microservices:    sortedMS(msMap),
@@ -225,7 +241,10 @@ func (c *Collector) collect(parent context.Context) {
 	c.lastSuccess = time.Now()
 	c.lastErr = nil
 	c.mu.Unlock()
-	c.log.Info("collected", "nodes", len(nodeMap), "pods", len(podList), "microservices", len(msMap))
+	c.log.Info("collected",
+		"nodes", len(nodeMap), "pods", len(podList), "microservices", len(msMap),
+		"metrics_available", metrics.Available(),
+		"nodes_missing_metrics", metrics.NodesMissing, "pods_missing_metrics", metrics.PodsMissing)
 }
 
 func (c *Collector) recordErr(err error) {
@@ -237,12 +256,19 @@ func (c *Collector) recordErr(err error) {
 
 // --- builders ---------------------------------------------------------------
 
-func buildNodes(nodes []corev1.Node, usage map[string]k8s.Usage) map[string]Node {
+// buildNodes returns the node map plus the number of nodes the metrics API
+// had no sample for, so the caller can tell "measured zero" from "not
+// measured" instead of publishing the two as the same number.
+func buildNodes(nodes []corev1.Node, usage map[string]k8s.Usage) (map[string]Node, int) {
 	out := make(map[string]Node, len(nodes))
+	missing := 0
 	for _, n := range nodes {
 		cpuCap := n.Status.Capacity.Cpu().MilliValue()
 		memCap := n.Status.Capacity.Memory().Value()
-		u := usage[n.Name]
+		u, haveUsage := usage[n.Name]
+		if !haveUsage {
+			missing++
+		}
 		ready := false
 		for _, cond := range n.Status.Conditions {
 			if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
@@ -272,36 +298,45 @@ func buildNodes(nodes []corev1.Node, usage map[string]k8s.Usage) map[string]Node
 			MemUsed:        u.MemBytes,
 			CPUPct:         pct(u.CPUMilli, cpuCap),
 			MemPct:         pct(u.MemBytes, memCap),
+			MetricsMissing: !haveUsage,
 		}
 	}
-	return out
+	return out, missing
 }
 
-func buildPods(pods []corev1.Pod, usage map[string]k8s.Usage) ([]Pod, map[string][]Pod, map[string][]Pod) {
+// buildPods returns the pod list, the by-node and by-workload groupings, and
+// the number of pods with no usage sample — see buildNodes for why that count
+// is tracked rather than folded into a zero.
+func buildPods(pods []corev1.Pod, usage map[string]k8s.Usage) ([]Pod, map[string][]Pod, map[string][]Pod, int) {
 	list := make([]Pod, 0, len(pods))
 	byNode := map[string][]Pod{}
 	byMS := map[string][]Pod{}
+	missing := 0
 	for i := range pods {
 		p := &pods[i]
 		kind, workload := ownerOf(p)
 		reqCPU, reqMem := podRequests(p)
-		u := usage[p.Namespace+"/"+p.Name]
+		u, haveUsage := usage[p.Namespace+"/"+p.Name]
+		if !haveUsage {
+			missing++
+		}
 		var restarts int32
 		for _, cs := range p.Status.ContainerStatuses {
 			restarts += cs.RestartCount
 		}
 		e := Pod{
-			Namespace:    p.Namespace,
-			Name:         p.Name,
-			Node:         p.Spec.NodeName,
-			Workload:     workload,
-			WorkloadKind: kind,
-			Phase:        string(p.Status.Phase),
-			Restarts:     restarts,
-			CPUUsed:      u.CPUMilli,
-			MemUsed:      u.MemBytes,
-			CPURequest:   reqCPU,
-			MemRequest:   reqMem,
+			Namespace:      p.Namespace,
+			Name:           p.Name,
+			Node:           p.Spec.NodeName,
+			Workload:       workload,
+			WorkloadKind:   kind,
+			Phase:          string(p.Status.Phase),
+			Restarts:       restarts,
+			CPUUsed:        u.CPUMilli,
+			MemUsed:        u.MemBytes,
+			CPURequest:     reqCPU,
+			MemRequest:     reqMem,
+			MetricsMissing: !haveUsage,
 		}
 		list = append(list, e)
 		if e.Node != "" {
@@ -310,7 +345,7 @@ func buildPods(pods []corev1.Pod, usage map[string]k8s.Usage) ([]Pod, map[string
 		key := msKey(p.Namespace, kind, workload)
 		byMS[key] = append(byMS[key], e)
 	}
-	return list, byNode, byMS
+	return list, byNode, byMS, missing
 }
 
 // msKey identifies a workload by namespace, controller kind and name, so a
@@ -393,12 +428,16 @@ func msEntry(ns, name, kind string, desired, ready int32, pods []Pod, hpa *autos
 	var restarts int32
 	running := 0
 	nodeSet := map[string]struct{}{}
+	metricsMissing := false
 	for _, p := range pods {
 		cpuUsed += p.CPUUsed
 		memUsed += p.MemUsed
 		cpuReq += p.CPURequest
 		memReq += p.MemRequest
 		restarts += p.Restarts
+		if p.MetricsMissing {
+			metricsMissing = true
+		}
 		if p.Phase == "Running" {
 			running++
 		}
@@ -425,7 +464,7 @@ func msEntry(ns, name, kind string, desired, ready int32, pods []Pod, hpa *autos
 		DesiredReplica: desired, ReadyReplicas: ready, RunningPods: running,
 		Restarts: restarts, Nodes: nodes,
 		CPUUsed: cpuUsed, MemUsed: memUsed, CPURequest: cpuReq, MemRequest: memReq,
-		CPUUtilPct: util,
+		CPUUtilPct: util, MetricsMissing: metricsMissing,
 	}
 	if hpa != nil {
 		h := HPA{

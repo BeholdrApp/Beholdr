@@ -64,8 +64,20 @@
       <div class="mt-1.5 text-3xl font-semibold tabular-nums">{m.ready_replicas}/{m.desired_replicas}</div>
       <div class="mt-1 text-xs text-slate-400">{m.running_pods} running pods</div>
     </div>
-    <StatCard label="CPU (sum)" value={fmtCpu(m.cpu_used)} sub={m.cpu_util_pct != null ? `${m.cpu_util_pct}% of requests` : ""} />
-    <StatCard label="Memory (sum)" value={fmtMem(m.mem_used)} />
+    <StatCard
+      label="CPU (sum)"
+      value={m.metrics_missing ? `${fmtCpu(m.cpu_used)}+` : fmtCpu(m.cpu_used)}
+      sub={m.metrics_missing
+        ? "undercount — some pods have no usage sample"
+        : m.cpu_util_pct != null
+          ? `${m.cpu_util_pct}% of requests`
+          : ""}
+    />
+    <StatCard
+      label="Memory (sum)"
+      value={m.metrics_missing ? `${fmtMem(m.mem_used)}+` : fmtMem(m.mem_used)}
+      sub={m.metrics_missing ? "undercount — some pods have no usage sample" : ""}
+    />
     <StatCard label="Spread" value={`${m.nodes.length} nodes`} />
     {#if m.hpa}
       <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
@@ -174,8 +186,12 @@
             <td class="px-4 py-3 font-mono text-[12px]">{p.name}</td>
             <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/nodes/{p.node}">{p.node}</a></td>
             <td class="px-4 py-3"><Pill tone={p.phase === "Running" ? "ok" : "warn"}>{p.phase}</Pill></td>
-            <td class="px-4 py-3 tabular-nums">{fmtCpu(p.cpu_used)}</td>
-            <td class="px-4 py-3 tabular-nums">{fmtMem(p.mem_used)}</td>
+            <td class="px-4 py-3 tabular-nums">
+              {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtCpu(p.cpu_used)}{/if}
+            </td>
+            <td class="px-4 py-3 tabular-nums">
+              {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtMem(p.mem_used)}{/if}
+            </td>
             <td class="px-4 py-3 tabular-nums">{p.restarts}</td>
           </tr>
         {/each}
