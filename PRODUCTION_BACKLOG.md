@@ -126,6 +126,15 @@ labeled preview may still ship early.
   `@sveltejs/adapter-static`/`svelte-check`/`typescript` bumped to their
   latest compatible releases, verified with a clean `npm run check` and
   `npm run build`.
+- **Caught by the new image gate (2026-09-09).** The first CI run of the Trivy
+  scan added in [#6](https://github.com/BeholdrApp/Beholdr/issues/6) blocked on
+  CVE-2026-46600 — a denial of service in `golang.org/x/net/dns/dnsmessage`,
+  HIGH, present in the built binary at v0.55.0 and fixed in v0.56.0. Bumped.
+  Worth recording as evidence for the gate: `govulncheck` classes the same
+  advisory as *not reachable* from Beholdr's code, so a reachability-only check
+  would have let it ship. Scanning the artifact for what is *present* and the
+  source for what is *reached* answer different questions, and this is a case
+  where they disagreed.
 - **Remaining, accepted.** One low-severity finding (`cookie` < 0.7.0,
   GHSA-pxg6-pf52-xh8x) is pinned by `@sveltejs/kit`@2.70.3, the latest
   stable release — the fix ships only in SvelteKit's 3.0.0 prerelease line.
