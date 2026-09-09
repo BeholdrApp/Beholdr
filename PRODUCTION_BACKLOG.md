@@ -75,6 +75,15 @@ labeled preview may still ship early.
   release build (see below), with the Go build toolchain and frontend build
   toolchain deliberately upgraded rather than accepting `npm audit fix
   --force`'s downgrade suggestions.
+- [x] Supply-chain hardening
+  ([#6](https://github.com/BeholdrApp/Beholdr/issues/6)): every base image
+  pinned by digest and every GitHub Action by commit SHA (a floating tag
+  silently changes what a reproducible build produces), Dependabot watching
+  those pins so they cannot rot, SBOM and `mode=max` build provenance attached
+  to every published image as registry attestations plus a downloadable
+  workflow artifact, and a Trivy scan of the *built image* in CI — which
+  reaches the Go standard library inside the binary, the surface the
+  2026-09-05 triage found dependency scanning had missed.
 - [x] Correct collector metric availability under failure
   ([#5](https://github.com/BeholdrApp/Beholdr/issues/5)): availability is
   derived per collection and carried in the snapshot instead of latched onto
@@ -113,18 +122,16 @@ labeled preview may still ship early.
   Beholdr uses `adapter-static` (a prerendered SPA with no SvelteKit server
   runtime or cookie handling in production), so this finding is not
   reachable in the shipped app. Revisit once SvelteKit 3 stabilizes.
-- **Proposed severity policy** (needs explicit sign-off before it gates
-  releases): block a release on any *reachable* high/critical finding in
-  the built binary/image or the production frontend bundle; track
-  dev-toolchain-only and non-reachable findings here instead of blocking on
-  them. Continuous enforcement (running `govulncheck`/`npm audit` in CI) is
-  still open — see "Finish automated quality gates" below.
+- **Severity policy** (signed off 2026-09-09, enforced in CI): a HIGH or
+  CRITICAL finding in the built image blocks the pull request **when a fix is
+  available**. Unfixed findings are reported in the job log but do not block —
+  an unfixable upstream CVE must not wedge every pull request. Dev-toolchain
+  and non-reachable findings are tracked here rather than gating. Widen the
+  gate by setting `ignore-unfixed: false` in `.github/workflows/ci.yml`.
+  Source-level enforcement (`govulncheck`/`npm audit`) is still open — see
+  "Finish automated quality gates" below.
 
 ## P0 — remaining release blockers
-
-- [ ] **Finish supply-chain hardening** ([#6](https://github.com/BeholdrApp/Beholdr/issues/6))**.** Dependency locks and deterministic
-  builds are in place. Pin base images and GitHub Actions by digest/immutable
-  revision, generate an SBOM, and scan image/dependencies in CI.
 
 - [ ] **Finish automated quality gates** ([#7](https://github.com/BeholdrApp/Beholdr/issues/7))**.** Backend/frontend tests and builds plus
   the container build run on pull requests. Add IaC validation, vulnerability

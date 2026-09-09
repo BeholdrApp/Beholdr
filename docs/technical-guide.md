@@ -310,7 +310,12 @@ cd web && npm run check   # svelte-check (types)
 ```
 
 `.github/workflows/ci.yml` runs both, plus a frontend production build and a
-container build, on every pull request.
+container build, on every pull request. The container job loads the image it
+builds and scans it with Trivy, so the check covers the artifact that would
+ship — including the Go standard library compiled into the binary, which
+scanning the module graph alone does not reach. The gate fails on HIGH or
+CRITICAL findings that have a fix available; unfixed findings are printed but
+do not block, so an unfixable upstream CVE cannot wedge every pull request.
 
 ## Build & push
 
@@ -322,6 +327,24 @@ docker push registry.example.com/beholdr:0.1.0
 The build compiles the SvelteKit UI with `npm ci` and the Go binary against
 the committed `go.sum` (no dependency resolution happens inside the build),
 embeds the UI, and ships a distroless image (typically ~15–25 MB).
+
+### Pinning and provenance
+
+Every base image in the `Dockerfile` is pinned by digest and every GitHub
+Action by commit SHA, with the human-readable tag kept beside it as a comment.
+A tag is mutable, so a floating tag silently changes what a "reproducible"
+build produces. Because digest pins never update on their own,
+`.github/dependabot.yml` watches them (plus `gomod` and `npm`) weekly —
+pinning without an updater rots into stale, unpatched versions.
+
+Images published by `.github/workflows/docker-publish.yml` carry an SBOM and
+full build provenance as registry attestations, and the SBOM is also uploaded
+as a workflow artifact for auditing a release without pulling the image:
+
+```bash
+docker buildx imagetools inspect <image> --format '{{ json .SBOM }}'
+docker buildx imagetools inspect <image> --format '{{ json .Provenance }}'
+```
 
 ## Deploy with Terraform
 
