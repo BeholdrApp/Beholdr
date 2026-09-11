@@ -7,7 +7,7 @@
 
 <div class="flex min-h-screen">
   <Sidebar />
-  <main class="mx-auto w-full max-w-[1400px] flex-1 px-8 py-7">
+  <main class="mx-auto min-w-0 w-full max-w-[1400px] flex-1 px-4 py-7 md:px-8">
     <HealthBanner />
     {@render children()}
   </main>

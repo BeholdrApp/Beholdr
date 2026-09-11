@@ -12,11 +12,11 @@
     href === "/" ? $page.url.pathname === "/" : $page.url.pathname.startsWith(href);
 </script>
 
-<aside class="sticky top-0 flex h-screen w-56 shrink-0 flex-col border-r border-white/5 bg-slate-900/50 px-3 py-6">
-  <div class="px-3">
+<aside class="sticky top-0 flex h-screen w-16 shrink-0 flex-col border-r border-white/5 bg-slate-900/50 px-2 py-6 sm:w-56 sm:px-3">
+  <div class="sm:px-3">
     <div class="flex items-center gap-2">
       <div class="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold">B</div>
-      <div>
+      <div class="hidden sm:block">
         <div class="text-lg font-semibold leading-none">Beholdr</div>
         <div class="text-[11px] text-slate-400">observability control plane</div>
       </div>
@@ -27,16 +27,18 @@
     {#each links as l}
       <a
         href={l.href}
+        aria-label={l.label}
+        aria-current={active(l.href) ? "page" : undefined}
         class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors
           {active(l.href) ? 'bg-white/5 text-indigo-300' : 'text-slate-300 hover:bg-white/5'}"
       >
         <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8">
           <path d={l.icon} stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        {l.label}
+        <span class="hidden sm:inline">{l.label}</span>
       </a>
     {/each}
   </nav>
 
-  <div class="mt-auto px-3 text-[11px] text-slate-500">v0.1.0</div>
+  <div class="mt-auto px-1 text-[11px] text-slate-500 sm:px-3">Preview</div>
 </aside>

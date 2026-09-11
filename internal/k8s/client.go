@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
@@ -146,12 +147,18 @@ func listNamespaced[T any](namespaces []string, list func(ns string) ([]T, error
 }
 
 func (c *Client) HPAs(ctx context.Context) ([]autoscalingv1.HorizontalPodAutoscaler, error) {
-	l, err := c.cs.AutoscalingV1().HorizontalPodAutoscalers("").List(ctx, metav1.ListOptions{})
+	items, err := listNamespaced(c.namespaces, func(ns string) ([]autoscalingv1.HorizontalPodAutoscaler, error) {
+		l, err := c.cs.AutoscalingV1().HorizontalPodAutoscalers(ns).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return l.Items, nil
+	})
 	if err != nil {
 		c.log.Warn("hpa list failed", "err", err)
-		return nil, nil // non-fatal
+		return nil, err // collector treats this as non-fatal
 	}
-	return l.Items, nil
+	return items, nil
 }
 
 // --- metrics.k8s.io --------------------------------------------------------
@@ -183,11 +190,17 @@ func (c *Client) NodeMetrics(ctx context.Context) (map[string]Usage, error) {
 // onto the client.
 func (c *Client) PodMetrics(ctx context.Context) (map[string]Usage, error) {
 	out := map[string]Usage{}
-	l, err := c.metrics.MetricsV1beta1().PodMetricses("").List(ctx, metav1.ListOptions{})
+	items, err := listNamespaced(c.namespaces, func(ns string) ([]metricsv1beta1.PodMetrics, error) {
+		l, err := c.metrics.MetricsV1beta1().PodMetricses(ns).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return l.Items, nil
+	})
 	if err != nil {
 		return out, fmt.Errorf("pod metrics unavailable (metrics-server?): %w", err)
 	}
-	for _, m := range l.Items {
+	for _, m := range items {
 		var u Usage
 		for _, ct := range m.Containers {
 			u.CPUMilli += ct.Usage.Cpu().MilliValue()

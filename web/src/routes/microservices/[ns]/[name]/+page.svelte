@@ -9,10 +9,12 @@
   import TimeChart from "$lib/components/TimeChart.svelte";
 
   type Resp = { microservice: Microservice; pods: PodInfo[]; history: Point[] };
-  const q = poll<Resp>(() => `/api/microservices/${$page.params.ns}/${$page.params.name}`, 5000);
+  const apiPath = () => `/api/microservices/${encodeURIComponent($page.params.ns ?? "")}/${encodeURIComponent($page.params.name ?? "")}`;
+  const kindQuery = () => `kind=${encodeURIComponent($page.url.searchParams.get("kind") ?? "")}`;
+  const q = poll<Resp>(() => `${apiPath()}?${kindQuery()}`, 5000);
   let metricsWindow = $state("24h");
   const metrics = poll<ServiceMetricsReport>(
-    () => `/api/microservices/${$page.params.ns}/${$page.params.name}/metrics?range=${metricsWindow}`,
+    () => `${apiPath()}/metrics?range=${metricsWindow}&${kindQuery()}`,
     60000,
   );
   const windows = ["1h", "6h", "24h", "7d", "21d"];
@@ -174,7 +176,7 @@
   <TimeChart data={q.data.history} height={180} lines={[{ key: "cpu_used", label: "CPU (m)", color: "#818cf8" }]} />
 
   <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Pods ({q.data.pods.length})</h2>
-  <div class="overflow-hidden rounded-2xl border border-white/5">
+  <div class="overflow-x-auto rounded-2xl border border-white/5">
     <table class="w-full text-sm">
       <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
         <tr><th class="px-4 py-3">Pod</th><th class="px-4 py-3">Node</th><th class="px-4 py-3">Phase</th>
@@ -185,7 +187,7 @@
           <tr class="bg-slate-900/30 hover:bg-slate-800/40">
             <td class="px-4 py-3 font-mono text-[12px]">{p.name}</td>
             <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/nodes/{p.node}">{p.node}</a></td>
-            <td class="px-4 py-3"><Pill tone={p.phase === "Running" ? "ok" : "warn"}>{p.phase}</Pill></td>
+            <td class="px-4 py-3"><Pill tone={p.phase === "Running" && !p.status_reason ? "ok" : "warn"}>{p.status_reason || p.phase}</Pill></td>
             <td class="px-4 py-3 tabular-nums">
               {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtCpu(p.cpu_used)}{/if}
             </td>

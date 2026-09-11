@@ -18,6 +18,8 @@ import (
 )
 
 type Server struct {
+	// Demo labels synthetic data. Set once before serving requests.
+	Demo          bool
 	col           *collect.Collector
 	integrations  *integrations.Monitor
 	serviceHealth *servicehealth.Service
@@ -120,6 +122,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	snap := s.col.Snapshot()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                true,
+		"demo":              s.Demo,
 		"ready":             hs.Ready,
 		"last_success":      hs.LastSuccess,
 		"last_error":        hs.LastError,
@@ -193,15 +196,8 @@ func (s *Server) microserviceDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var ms *collect.Microservice
-	for i := range snap.Microservices {
-		if snap.Microservices[i].Namespace == ns && snap.Microservices[i].Name == name {
-			ms = &snap.Microservices[i]
-			break
-		}
-	}
+	ms := resolveWorkload(w, r, snap)
 	if ms == nil {
-		http.Error(w, "microservice not found", http.StatusNotFound)
 		return
 	}
 	pods := []collect.Pod{}
@@ -221,18 +217,11 @@ func (s *Server) microserviceMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns, name := r.PathValue("ns"), r.PathValue("name")
-	var workload *collect.Microservice
-	for i := range snap.Microservices {
-		if snap.Microservices[i].Namespace == ns && snap.Microservices[i].Name == name {
-			workload = &snap.Microservices[i]
-			break
-		}
-	}
+	workload := resolveWorkload(w, r, snap)
 	// Resolving against the snapshot before querying is what keeps the path
 	// parameters out of the PromQL templates: only the names of Kubernetes
 	// objects the collector actually saw can reach them.
 	if workload == nil {
-		http.Error(w, "microservice not found", http.StatusNotFound)
 		return
 	}
 	window, ok := servicehealth.ParseWindow(r.URL.Query().Get("range"))
@@ -250,7 +239,7 @@ func (s *Server) microserviceMetrics(w http.ResponseWriter, r *http.Request) {
 	// replaced by earlier rollouts stay in the history.
 	podNames := make([]string, 0, 8)
 	for _, p := range snap.Pods {
-		if p.Namespace == ns && p.Workload == name {
+		if p.Namespace == ns && p.Workload == name && p.WorkloadKind == workload.Kind {
 			podNames = append(podNames, p.Name)
 		}
 	}
@@ -273,6 +262,29 @@ func (s *Server) microserviceMetrics(w http.ResponseWriter, r *http.Request) {
 	// proxy hold one for longer would show an operator a stale severity badge.
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, report)
+}
+
+// A namespace/name pair can identify several controller kinds. Old links
+// remain valid when unambiguous; ambiguous requests must select a kind rather
+// than silently returning a different workload's pods, history and score.
+func resolveWorkload(w http.ResponseWriter, r *http.Request, snap collect.Snapshot) *collect.Microservice {
+	ns, name, kind := r.PathValue("ns"), r.PathValue("name"), r.URL.Query().Get("kind")
+	var found *collect.Microservice
+	for i := range snap.Microservices {
+		m := &snap.Microservices[i]
+		if m.Namespace != ns || m.Name != name || (kind != "" && m.Kind != kind) {
+			continue
+		}
+		if found != nil {
+			http.Error(w, "multiple workload kinds match; specify kind", http.StatusConflict)
+			return nil
+		}
+		found = m
+	}
+	if found == nil {
+		http.Error(w, "microservice not found", http.StatusNotFound)
+	}
+	return found
 }
 
 func (s *Server) pods(w http.ResponseWriter, r *http.Request) {

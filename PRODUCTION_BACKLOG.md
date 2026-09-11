@@ -8,12 +8,13 @@ in-memory history, while Prometheus supplies bounded per-service long-range
 charts. There is no notification delivery, log or trace search, durable
 storage, built-in authentication, or arbitrary metric query capability.
 
-**The architecture direction is under active revision.** An earlier note held
+**The architecture direction is recorded in [ADR 0001](docs/adr/0001-ingestion-and-storage-ownership.md).** An earlier note held
 that Beholdr would only ever *consume* existing Prometheus, Elasticsearch and
 OpenTelemetry data, never owning ingestion, storage or query evaluation. The
-target architecture contradicts that — `gaze` owns the ingestion path and
-`lair` owns the query path — so the decision is being re-recorded rather than
-inherited. See [#1](https://github.com/BeholdrApp/Beholdr/issues/1).
+target architecture supersedes that constraint: `gaze` owns the ingestion path
+and `lair` owns query access while established systems own storage engines and
+rule evaluation. Current development focuses on isolated Beholdr; infrastructure
+provisioning is deferred.
 
 One non-goal survives the revision unchanged: **unrestricted user-supplied
 query access stays out of scope.** `lair` exposes named, bounded queries, never
@@ -53,6 +54,15 @@ labeled preview may still ship early.
 
 ## Delivered foundations
 
+- [x] Isolated local Beholdr demo: one command builds the embedded application
+  with synthetic nodes, workloads and service-health inputs. It ignores external
+  configuration, binds to loopback and is covered by an API smoke test in CI.
+- [x] Namespace filters now apply to HPA and pod-metric reads as well as
+  workload discovery. Detail/metric URLs preserve controller kind; ambiguous
+  legacy links return 409 instead of selecting the wrong workload.
+- [x] Founding architecture decisions recorded in `docs/adr`. Deployment
+  profiles remain future implementation work, and infrastructure provisioning
+  is deferred.
 - [x] Correct liveness/readiness semantics and stale-data reporting.
 - [x] Secure deployment boundary: CORS disabled by default, explicit TLS mode,
   and required ingress authentication unless deliberately overridden.
@@ -106,6 +116,12 @@ labeled preview may still ship early.
 
 ## Dependency and toolchain vulnerability triage (2026-09-05)
 
+- **Frontend toolchain refresh (2026-09-11).** Vite 8, its Svelte 7 plugin
+  and Vitest 5 must be upgraded together. Vitest configuration now imports
+  its own typed `defineConfig`. TypeScript 7 is deferred because the installed
+  `svelte-check` 4.7.6 declares support for TypeScript 5 or 6 only; bypassing
+  that peer contract would leave the type gate unsupported. Related packages
+  are grouped in Dependabot to avoid independent incompatible upgrades.
 - **Go toolchain.** `govulncheck` found 28 reachable advisories, all in the
   Go standard library shipped inside the compiled binary (`crypto/tls`,
   `crypto/x509`, `net/http`, `encoding/asn1`, etc.) plus two in

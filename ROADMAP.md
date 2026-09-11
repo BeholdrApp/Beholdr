@@ -7,6 +7,13 @@ Execution detail for the current observer lives in
 [PRODUCTION_BACKLOG.md](PRODUCTION_BACKLOG.md). This document covers the
 architecture and the sequencing.
 
+The founding decisions are recorded in [ADR 0001](docs/adr/0001-ingestion-and-storage-ownership.md),
+[ADR 0002](docs/adr/0002-repository-and-component-boundaries.md),
+[ADR 0003](docs/adr/0003-ports-and-adapters.md) and
+[ADR 0004](docs/adr/0004-deployment-profiles.md). Profile implementation and
+infrastructure provisioning remain deferred while the Beholdr application is
+developed and tested independently.
+
 ## Components
 
 Six components, three repositories.
@@ -112,12 +119,16 @@ Record the decisions, then build the seams everything else depends on.
 First supported release. Load and security tested, documented supported scale,
 both deployment profiles verified, every port covered by its conformance suite.
 
-## Initial production target
+## Delivery target
 
-`aks-prod-we` and `aks-prod-ne`, monitored from a shared management cluster
-running `beholdr`, `gaze` and `omen`. `stalkr` in each monitored cluster,
-pushing outward only — no inbound firewall rules, no centrally held kubeconfig,
-no cluster API server reachable from the management plane.
+Develop and validate Beholdr as an independent project first. The local demo
+runs only Beholdr, with explicitly labeled synthetic data and no external
+infrastructure connections. Infrastructure provisioning is deferred.
+
+The future distributed profile uses a shared management cluster running
+`beholdr`, `gaze` and `omen`, with `stalkr` in each monitored cluster pushing
+outward only. No organization-specific cluster, domain or cloud account is
+part of the product contract.
 
 ## The test this design has to pass
 
