@@ -75,7 +75,7 @@
           <tr class="bg-slate-900/30 hover:bg-slate-800/40">
             <td class="px-4 py-3 font-mono text-[12px]">{p.name}</td>
             <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/microservices/{encodeURIComponent(p.namespace)}/{encodeURIComponent(p.workload)}?kind={encodeURIComponent(p.workload_kind)}">{p.workload}</a></td>
-            <td class="px-4 py-3"><Pill tone={p.phase === "Running" ? "ok" : "warn"}>{p.phase}</Pill></td>
+            <td class="px-4 py-3"><Pill tone={p.phase === "Running" && !p.status_reason ? "ok" : "warn"}>{p.status_reason || p.phase}</Pill></td>
             <td class="px-4 py-3 tabular-nums">
               {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtCpu(p.cpu_used)}{/if}
             </td>

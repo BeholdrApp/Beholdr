@@ -331,6 +331,7 @@ func buildPods(pods []corev1.Pod, usage map[string]k8s.Usage) ([]Pod, map[string
 			Workload:       workload,
 			WorkloadKind:   kind,
 			Phase:          string(p.Status.Phase),
+			StatusReason:   podStatusReason(p),
 			Restarts:       restarts,
 			CPUUsed:        u.CPUMilli,
 			MemUsed:        u.MemBytes,
@@ -346,6 +347,22 @@ func buildPods(pods []corev1.Pod, usage map[string]k8s.Usage) ([]Pod, map[string
 		byMS[key] = append(byMS[key], e)
 	}
 	return list, byNode, byMS, missing
+}
+
+// A pod can remain in Running phase while a container is crash-looping.
+// Keep the Kubernetes phase and surface the current reason separately.
+func podStatusReason(p *corev1.Pod) string {
+	for _, statuses := range [][]corev1.ContainerStatus{p.Status.InitContainerStatuses, p.Status.ContainerStatuses} {
+		for _, cs := range statuses {
+			if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" {
+				return cs.State.Waiting.Reason
+			}
+			if cs.State.Terminated != nil && cs.State.Terminated.ExitCode != 0 && cs.State.Terminated.Reason != "" {
+				return cs.State.Terminated.Reason
+			}
+		}
+	}
+	return p.Status.Reason
 }
 
 // msKey identifies a workload by namespace, controller kind and name, so a

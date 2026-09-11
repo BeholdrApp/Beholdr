@@ -50,6 +50,7 @@ type Pod struct {
 	Workload     string `json:"workload"`
 	WorkloadKind string `json:"workload_kind"`
 	Phase        string `json:"phase"`
+	StatusReason string `json:"status_reason,omitempty"`
 	Restarts     int32  `json:"restarts"`
 	CPUUsed      int64  `json:"cpu_used"`
 	MemUsed      int64  `json:"mem_used"`
