@@ -22,8 +22,11 @@
     height?: number;
   } = $props();
   const id = $props.id();
-  const W = 820,
-    padL = 42,
+  let chartWidth = $state(856);
+  // Match the SVG coordinate space to its content width so axis text stays
+  // readable on phones and in multi-column chart layouts.
+  const W = $derived(Math.max(160, chartWidth - 36));
+  const padL = 42,
     padR = 14,
     padT = 15,
     padB = 16;
@@ -77,7 +80,7 @@
   }
 </script>
 
-<div class="chart-card">
+<div class="chart-card" bind:clientWidth={chartWidth}>
   <div class="chart-legend">
     {#each lines as l}<span
         ><span class="legend-mark" style:background={color(l.color)}
@@ -180,7 +183,7 @@
 <style>
   .chart-slider {
     width: 100%;
-    height: 3px;
+    height: 20px;
     accent-color: #b9de8b;
     margin-top: 15px;
     opacity: 0.45;
