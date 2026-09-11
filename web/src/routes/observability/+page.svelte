@@ -24,8 +24,9 @@
 
 <h1 class="text-2xl font-semibold">Observability</h1>
 <p class="mt-1 max-w-3xl text-sm text-slate-400">
-  Beholdr connects the telemetry systems; it does not duplicate their storage. Metrics remain in Prometheus,
-  logs and traces remain in Elasticsearch, and application telemetry enters through OpenTelemetry.
+  Check connectivity to your telemetry providers. Prometheus supplies service-health charts;
+  Elasticsearch and OpenTelemetry Collector connectivity checks are also available.
+  Log search, trace exploration and ingestion are planned platform features.
 </p>
 
 {#if q.error}
@@ -34,7 +35,7 @@
   <p class="mt-5 text-sm text-slate-400">Loading integrations…</p>
 {:else}
   <p class="mt-3 text-xs text-slate-500">
-    {q.data.updated_at ? `Checked ${fmtTime(q.data.updated_at)}` : "Waiting for the first connectivity check"}
+    {q.data.providers.length === 0 ? "No external providers are connected. In the local demo, service-health charts use synthetic samples." : q.data.updated_at ? `Checked ${fmtTime(q.data.updated_at)}` : "Waiting for the first connectivity check"}
   </p>
 
   <div class="mt-5 grid gap-4 lg:grid-cols-3">

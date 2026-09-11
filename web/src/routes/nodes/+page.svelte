@@ -21,7 +21,7 @@
 
   <MetricsNotice metrics={q.data.metrics} scope="nodes" />
 
-  <div class="mt-5 overflow-hidden rounded-2xl border border-white/5">
+  <div class="mt-5 overflow-x-auto rounded-2xl border border-white/5">
     <table class="w-full text-sm">
       <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
         <tr>

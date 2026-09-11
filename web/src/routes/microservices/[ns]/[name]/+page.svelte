@@ -9,10 +9,12 @@
   import TimeChart from "$lib/components/TimeChart.svelte";
 
   type Resp = { microservice: Microservice; pods: PodInfo[]; history: Point[] };
-  const q = poll<Resp>(() => `/api/microservices/${$page.params.ns}/${$page.params.name}`, 5000);
+  const apiPath = () => `/api/microservices/${encodeURIComponent($page.params.ns ?? "")}/${encodeURIComponent($page.params.name ?? "")}`;
+  const kindQuery = () => `kind=${encodeURIComponent($page.url.searchParams.get("kind") ?? "")}`;
+  const q = poll<Resp>(() => `${apiPath()}?${kindQuery()}`, 5000);
   let metricsWindow = $state("24h");
   const metrics = poll<ServiceMetricsReport>(
-    () => `/api/microservices/${$page.params.ns}/${$page.params.name}/metrics?range=${metricsWindow}`,
+    () => `${apiPath()}/metrics?range=${metricsWindow}&${kindQuery()}`,
     60000,
   );
   const windows = ["1h", "6h", "24h", "7d", "21d"];
@@ -174,7 +176,7 @@
   <TimeChart data={q.data.history} height={180} lines={[{ key: "cpu_used", label: "CPU (m)", color: "#818cf8" }]} />
 
   <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Pods ({q.data.pods.length})</h2>
-  <div class="overflow-hidden rounded-2xl border border-white/5">
+  <div class="overflow-x-auto rounded-2xl border border-white/5">
     <table class="w-full text-sm">
       <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
         <tr><th class="px-4 py-3">Pod</th><th class="px-4 py-3">Node</th><th class="px-4 py-3">Phase</th>

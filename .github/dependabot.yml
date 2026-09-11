@@ -25,9 +25,15 @@ updates:
     schedule:
       interval: weekly
     labels: ["security"]
+    groups:
+      kubernetes:
+        patterns: ["k8s.io/api", "k8s.io/apimachinery", "k8s.io/client-go", "k8s.io/metrics"]
 
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
     labels: ["security"]
+    groups:
+      frontend-toolchain:
+        patterns: ["vite", "vitest", "@sveltejs/*", "svelte", "svelte-check", "typescript"]

@@ -124,6 +124,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Set up Go for the isolated demo smoke test
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Smoke test the embedded demo
+        run: npm run demo:check
+
       # Report-only, deliberately. Every frontend dependency is a
       # devDependency — the shipped SPA is compiled output with no runtime
       # dependency tree — so `npm audit --omit=dev` has nothing to audit and

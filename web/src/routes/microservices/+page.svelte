@@ -33,7 +33,7 @@
     class="mt-4 w-72 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm outline-none focus:border-indigo-500"
   />
 
-  <div class="mt-4 overflow-hidden rounded-2xl border border-white/5">
+  <div class="mt-4 overflow-x-auto rounded-2xl border border-white/5">
     <table class="w-full text-sm">
       <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
         <tr>
@@ -46,7 +46,7 @@
         {#each rows as m (m.key)}
           <tr class="bg-slate-900/30 hover:bg-slate-800/40">
             <td class="px-4 py-3">
-              <a class="text-indigo-300 hover:underline" href="/microservices/{m.namespace}/{m.name}">{m.name}</a>
+              <a class="text-indigo-300 hover:underline" href="/microservices/{encodeURIComponent(m.namespace)}/{encodeURIComponent(m.name)}?kind={encodeURIComponent(m.kind)}">{m.name}</a>
               <div class="text-[11px] text-slate-500">{m.kind}</div>
             </td>
             <td class="px-4 py-3 text-slate-400">{m.namespace}</td>

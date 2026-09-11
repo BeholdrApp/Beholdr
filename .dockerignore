@@ -7,3 +7,5 @@ internal/webui/dist/*
 *.md
 deploy
 docker-compose.yml
+out
+coverage.out

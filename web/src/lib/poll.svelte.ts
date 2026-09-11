@@ -12,25 +12,31 @@ export function poll<T>(url: string | (() => string), intervalMs = 5000) {
     // lifecycle. An error belongs to the previously requested URL, not the
     // next one selected by the user.
     const currentUrl = resolve();
+    data = null;
     error = null;
     loading = true;
 
     let alive = true;
+    const controller = new AbortController();
+    let inFlight = false;
     const tick = async () => {
+      if (inFlight) return;
+      inFlight = true;
       try {
-        const r = await fetch(currentUrl);
+        const r = await fetch(currentUrl, { signal: controller.signal });
         if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
         const j = (await r.json()) as T;
         if (alive) { data = j; error = null; }
       } catch (e) {
         if (alive) error = e instanceof Error ? e.message : String(e);
       } finally {
+        inFlight = false;
         if (alive) loading = false;
       }
     };
     tick();
     const id = setInterval(tick, intervalMs);
-    return () => { alive = false; clearInterval(id); };
+    return () => { alive = false; controller.abort(); clearInterval(id); };
   });
 
   return {

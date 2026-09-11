@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "demo": "node ../scripts/demo.mjs",
+    "demo:check": "node ../scripts/demo.mjs --check",
     "dev": "vite dev",
     "build": "svelte-kit sync && vite build",
     "preview": "vite preview",
@@ -13,13 +15,13 @@
   "devDependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
     "@sveltejs/kit": "^2.70.3",
-    "@sveltejs/vite-plugin-svelte": "^5.1.1",
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "svelte": "^5.0.0",
     "svelte-check": "^4.7.6",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
-    "vite": "^6.4.3",
-    "vitest": "^3.2.4"
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0"
   }
 }

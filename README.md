@@ -42,6 +42,29 @@ It runs as a single small container with the dashboard included.
 
 ## Try it locally
 
+To explore Beholdr in isolation, install **Go 1.25.14 or newer** and **Node.js
+22 with npm**, then run:
+
+```sh
+cd web
+npm ci
+npm run demo
+```
+
+Open [127.0.0.1:8000](http://127.0.0.1:8000). This builds the dashboard into a
+single Go application with three sample nodes, six workloads, resource usage,
+autoscaling and service-health charts. The checkout workload demonstrates a
+degraded service. The banner clearly identifies all data as synthetic.
+
+The demo listens only on loopback, ignores Kubernetes and telemetry environment
+configuration, and makes no cluster or external provider connections. It needs
+no Docker, cloud account or infrastructure provisioning. Dependency installation
+and the first build may need internet access. Press Ctrl+C to stop. The built
+application is also available in `out/beholdr-demo` (`.exe` on Windows); run it
+with `-demo`. See the [demo guide](docs/local-demo.md) for the walkthrough.
+
+### Connect your own cluster
+
 You need **Go 1.25 or newer**, **Node.js 22 with npm**, and a working kubeconfig
 with permission to read nodes, pods, Deployments, StatefulSets, DaemonSets, HPAs,
 and metrics. Beholdr uses

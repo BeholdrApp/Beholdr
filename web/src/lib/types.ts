@@ -31,6 +31,7 @@ export interface NodeInfo {
 }
 export interface PodInfo {
   namespace: string; name: string; node: string; workload: string;
+  workload_kind: string;
   phase: string; restarts: number; cpu_used: number; mem_used: number;
   cpu_request: number; mem_request: number;
   /** As on NodeInfo: usage was not measured for this pod. */
@@ -53,6 +54,7 @@ export type Point = Record<string, number>;
 
 export interface Health {
   ok: boolean;
+  demo?: boolean;
   ready: boolean;
   last_success: number;
   last_error: string;

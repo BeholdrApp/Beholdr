@@ -337,8 +337,8 @@ func newServiceMetricsServer(t *testing.T, querier *apiMetricsQuerier) *Server {
 			Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 		}},
 		pods: []corev1.Pod{
-			pod("production", "video-7d9f8c6b54-x2k9p", "video"),
-			pod("production", "video-7d9f8c6b54-b1n4q", "video"),
+			podRS("production", "video-7d9f8c6b54-x2k9p", "video-7d9f8c6b54"),
+			podRS("production", "video-7d9f8c6b54-b1n4q", "video-7d9f8c6b54"),
 			pod("production", "video-gateway-7d9f8c6b54-zzzzz", "video-gateway"),
 		},
 	}
@@ -426,9 +426,7 @@ func TestMicroserviceDetailEndpoint(t *testing.T) {
 
 // TestMicroserviceDetailDoesNotMixPodsAcrossKinds guards against a
 // Deployment and a StatefulSet sharing a name in the same namespace: the
-// detail route has no kind in its URL, so it can only resolve to one of the
-// two, but its pod list must never include the other one's pods regardless
-// of which it resolves to.
+// detail and metrics routes must select a kind and never mix their pods.
 func TestMicroserviceDetailDoesNotMixPodsAcrossKinds(t *testing.T) {
 	depReplicas := int32(2)
 	stsReplicas := int32(1)
@@ -459,31 +457,61 @@ func TestMicroserviceDetailDoesNotMixPodsAcrossKinds(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	col.Run(ctx)
-	s := NewServer(col, nil, nil, nil, testLogger())
-
-	w := do(s, http.MethodGet, "/api/microservices/default/shared", "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
-	}
-	var resp struct {
-		Microservice collect.Microservice `json:"microservice"`
-		Pods         []collect.Pod        `json:"pods"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+	querier := &apiMetricsQuerier{}
+	health, err := servicehealth.New(querier, servicehealth.Config{CacheTTL: -1})
+	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range resp.Pods {
-		if p.WorkloadKind != resp.Microservice.Kind {
-			t.Errorf("pod %s has kind %q but resolved microservice is kind %q: pods from the other workload leaked into this response",
-				p.Name, p.WorkloadKind, resp.Microservice.Kind)
+	s := NewServer(col, nil, health, nil, testLogger())
+	for _, suffix := range []string{"", "/metrics"} {
+		if w := do(s, http.MethodGet, "/api/microservices/default/shared"+suffix, ""); w.Code != http.StatusConflict {
+			t.Fatalf("ambiguous workload must return 409, got %d: %s", w.Code, w.Body.String())
+		}
+		if w := do(s, http.MethodGet, "/api/microservices/default/shared"+suffix+"?kind=Job", ""); w.Code != http.StatusNotFound {
+			t.Fatalf("absent kind must return 404, got %d", w.Code)
 		}
 	}
-	wantPods := 2
-	if resp.Microservice.Kind == "StatefulSet" {
-		wantPods = 1
-	}
-	if len(resp.Pods) != wantPods {
-		t.Errorf("want %d pods for the resolved %s, got %d: %+v", wantPods, resp.Microservice.Kind, len(resp.Pods), resp.Pods)
+	for _, kind := range []string{"Deployment", "StatefulSet"} {
+		w := do(s, http.MethodGet, "/api/microservices/default/shared?kind="+kind, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var resp struct {
+			Microservice collect.Microservice `json:"microservice"`
+			Pods         []collect.Pod        `json:"pods"`
+		}
+		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range resp.Pods {
+			if p.WorkloadKind != resp.Microservice.Kind {
+				t.Errorf("pod %s has kind %q but resolved microservice is kind %q: pods from the other workload leaked into this response",
+					p.Name, p.WorkloadKind, resp.Microservice.Kind)
+			}
+		}
+		wantPods := 2
+		if resp.Microservice.Kind == "StatefulSet" {
+			wantPods = 1
+		}
+		if len(resp.Pods) != wantPods {
+			t.Errorf("want %d pods for the resolved %s, got %d: %+v", wantPods, resp.Microservice.Kind, len(resp.Pods), resp.Pods)
+		}
+		if resp.Microservice.Kind != kind {
+			t.Fatalf("selected %s but received %s", kind, resp.Microservice.Kind)
+		}
+		querier.instants = nil
+		w = do(s, http.MethodGet, "/api/microservices/default/shared/metrics?kind="+kind, "")
+		if w.Code != http.StatusOK {
+			t.Fatalf("metrics: %d %s", w.Code, w.Body.String())
+		}
+		for _, query := range querier.instants {
+			if kind == "Deployment" && strings.Contains(query, "shared-0") {
+				t.Fatalf("StatefulSet pod leaked into Deployment query: %s", query)
+			}
+			if kind == "StatefulSet" && strings.Contains(query, "shared-abc12345") {
+				t.Fatalf("Deployment pods leaked into StatefulSet query: %s", query)
+			}
+		}
 	}
 }
 

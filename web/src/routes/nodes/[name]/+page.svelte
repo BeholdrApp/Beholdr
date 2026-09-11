@@ -64,7 +64,7 @@
   />
 
   <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Pods on this node</h2>
-  <div class="overflow-hidden rounded-2xl border border-white/5">
+  <div class="overflow-x-auto rounded-2xl border border-white/5">
     <table class="w-full text-sm">
       <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
         <tr><th class="px-4 py-3">Pod</th><th class="px-4 py-3">Microservice</th><th class="px-4 py-3">Phase</th>
@@ -74,7 +74,7 @@
         {#each n.pods ?? [] as p (p.namespace + p.name)}
           <tr class="bg-slate-900/30 hover:bg-slate-800/40">
             <td class="px-4 py-3 font-mono text-[12px]">{p.name}</td>
-            <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/microservices/{p.namespace}/{p.workload}">{p.workload}</a></td>
+            <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/microservices/{encodeURIComponent(p.namespace)}/{encodeURIComponent(p.workload)}?kind={encodeURIComponent(p.workload_kind)}">{p.workload}</a></td>
             <td class="px-4 py-3"><Pill tone={p.phase === "Running" ? "ok" : "warn"}>{p.phase}</Pill></td>
             <td class="px-4 py-3 tabular-nums">
               {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtCpu(p.cpu_used)}{/if}
