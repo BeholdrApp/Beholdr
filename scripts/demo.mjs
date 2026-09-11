@@ -5,6 +5,7 @@ import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import assert from "node:assert/strict";
+import net from "node:net";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const web = path.join(root, "web");
@@ -46,6 +47,13 @@ async function build() {
   }
 }
 
+// Fail before building if another instance owns the demo port. Otherwise a
+// smoke test could accidentally validate an older application already running.
+await new Promise((resolve, reject) => {
+  const probe = net.createServer();
+  probe.once("error", () => reject(new Error("Port 8000 is already in use. Stop the existing listener before running the demo.")));
+  probe.listen(8000, "127.0.0.1", () => probe.close(resolve));
+});
 await build();
 const server = spawn(binary, ["-demo"], { cwd: root, stdio: "inherit", windowsHide: true });
 let serverError;
@@ -87,6 +95,7 @@ try {
     assert.deepEqual((await json("/api/integrations")).providers, []);
     const html = await (await fetch(base)).text();
     assert.ok(html.includes("_app/immutable"), "The embedded UI was not built.");
+    assert.equal(server.exitCode, null, "The demo process exited during the smoke test.");
     console.log("Demo smoke check passed: real API, six workloads, charts and embedded UI.");
     server.kill();
   } else {
