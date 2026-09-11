@@ -40,8 +40,58 @@ jobs:
             exit 1
           fi
 
+      # go.mod's toolchain directive pins the exact patch release, and the
+      # Dockerfile pins the same one. They are set independently, so this
+      # asserts they have not drifted — a drifted pair means CI validates a
+      # toolchain the release never uses. That is not hypothetical: govulncheck
+      # reported 27 reachable standard-library advisories against go1.25.1 and
+      # zero against the go1.25.14 the release image builds with, so the value
+      # of the scan below depends on this matching.
+      - name: Verify toolchain matches the release image
+        run: |
+          ci_version="$(go env GOVERSION)"
+          image_version="go$(grep -o 'golang:[0-9.]*' Dockerfile | head -1 | cut -d: -f2)"
+          echo "CI toolchain:  $ci_version"
+          echo "Release image: $image_version"
+          if [ "$ci_version" != "$image_version" ]; then
+            echo "::error::CI builds with $ci_version but the release image uses $image_version."
+            echo "Update the toolchain directive in go.mod and the golang base image in Dockerfile together."
+            exit 1
+          fi
+
       - name: Test
-        run: go test ./... -race -cover
+        run: go test ./... -race -covermode=atomic -coverprofile=coverage.out
+
+      # A floor rather than a diff against the base branch: it needs no history
+      # and no external service, and it fails the same way for everyone. Raise
+      # .github/coverage-threshold as coverage improves — that ratchet is the
+      # regression guard.
+      - name: Check coverage
+        run: |
+          total="$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}' | tr -d '%')"
+          floor="$(tr -d '[:space:]' < .github/coverage-threshold)"
+          echo "### Go coverage: ${total}% (floor ${floor}%)" >> "$GITHUB_STEP_SUMMARY"
+          awk -v t="$total" -v f="$floor" 'BEGIN {
+            if (t+0 < f+0) {
+              print "Coverage " t "% is below the " f "% floor"
+              exit 1
+            }
+            print "Coverage " t "% meets the " f "% floor"
+          }'
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: error
+
+      # Complements the image scan in the container job: Trivy reports what is
+      # present in the artifact, govulncheck reports what the code actually
+      # reaches. Only reachable findings fail here, which is what the
+      # signed-off severity policy gates on.
+      - name: Vulnerability check (govulncheck)
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
   frontend:
     name: Frontend (SvelteKit)
@@ -66,8 +116,69 @@ jobs:
       - name: Type check
         run: npm run check
 
+      # The suite exists (vitest, in web/src/lib/*.test.ts) but was never wired
+      # into CI, so it could only fail locally.
+      - name: Test
+        run: npm run test
+
       - name: Build
         run: npm run build
+
+      # Report-only, deliberately. Every frontend dependency is a
+      # devDependency — the shipped SPA is compiled output with no runtime
+      # dependency tree — so `npm audit --omit=dev` has nothing to audit and
+      # would pass vacuously, while the full graph is exactly the
+      # dev-toolchain surface the severity policy says to track rather than
+      # gate on. The gate for what actually ships is the image scan in the
+      # container job.
+      - name: Audit dependencies (report only)
+        if: always()
+        run: |
+          {
+            echo '### npm audit (dev toolchain — not a gate)'
+            echo '```'
+            npm audit 2>&1 | tail -40 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  iac:
+    name: Infrastructure as code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform format
+        run: terraform fmt -check -recursive deploy/terraform
+
+      # -backend=false keeps this offline: validation needs the provider
+      # schemas, not remote state.
+      - name: Terraform validate
+        working-directory: deploy/terraform
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      # Pinned by version and verified by checksum. Pulling a release binary
+      # into CI is itself a supply-chain step, so it gets the same treatment
+      # as the image and action pins.
+      - name: Install kubeconform
+        env:
+          VERSION: v0.8.0
+          SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+        run: |
+          url="https://github.com/yannh/kubeconform/releases/download/${VERSION}/kubeconform-linux-amd64.tar.gz"
+          curl -sSLo kubeconform.tar.gz "$url"
+          echo "${SHA256}  kubeconform.tar.gz" | sha256sum --check --strict
+          tar xzf kubeconform.tar.gz kubeconform
+
+      - name: Validate Kubernetes manifests
+        run: ./kubeconform -strict -summary deploy/k8s/beholdr.yaml
 
   container:
     name: Container build
@@ -108,6 +219,33 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          format: table
+
+      # Gate application dependencies. Debian's base-files, ca-certificates
+      # and netbase already carry GPL metadata in the pinned distroless base;
+      # report those separately instead of treating them as new Go dependencies.
+      # This does not exempt OS packages from the vulnerability gate above.
+      - name: Scan application licenses
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PKG_TYPES: library
+        with:
+          image-ref: beholdr:ci
+          scanners: license
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          format: table
+
+      - name: Report base-image licenses
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PKG_TYPES: os
+        with:
+          image-ref: beholdr:ci
+          scanners: license
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: "0"
           format: table
 
       # Same scan without the gate, so the log always carries the full picture
