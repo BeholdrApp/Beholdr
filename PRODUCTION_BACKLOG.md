@@ -77,7 +77,8 @@ labeled preview may still ship early.
   --force`'s downgrade suggestions.
 - [x] Automated quality gates
   ([#7](https://github.com/BeholdrApp/Beholdr/issues/7)): `govulncheck` and a
-  Trivy license scan enforced in CI, Terraform `fmt`/`validate` and
+  Trivy application-license scan enforced in CI (base-image licenses are
+  reported separately), Terraform `fmt`/`validate` and
   `kubeconform` validation of the deployment manifests, a coverage floor that
   fails on regression, and the frontend vitest suite — which existed but had
   never been wired into CI. Also aligned the CI Go toolchain with the release
@@ -147,8 +148,16 @@ labeled preview may still ship early.
   an unfixable upstream CVE must not wedge every pull request. Dev-toolchain
   and non-reachable findings are tracked here rather than gating. Widen the
   gate by setting `ignore-unfixed: false` in `.github/workflows/ci.yml`.
-  Source-level enforcement (`govulncheck`/`npm audit`) is still open — see
-  "Finish automated quality gates" below.
+  Source-level enforcement is delivered in #7: `govulncheck` gates reachable
+  findings and `npm audit` reports the frontend toolchain graph.
+- **License scan scope (2026-09-11).** Application package licenses gate CI.
+  The pinned distroless image already includes Debian `base-files`,
+  `ca-certificates` and `netbase` with GPL license metadata, which caused the
+  original all-package gate to fail independently of application changes.
+  OS licenses remain visible in a separate report; all OS packages still pass
+  through the blocking vulnerability scan. Frontend license attribution and
+  base-image redistribution review remain release work, not a claim made by
+  this application dependency gate.
 
 ## P0 — remaining release blockers
 

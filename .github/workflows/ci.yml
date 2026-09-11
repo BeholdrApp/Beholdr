@@ -221,19 +221,31 @@ jobs:
           exit-code: "1"
           format: table
 
-      # License policy, scanned against the same artifact. Trivy classifies
-      # licenses by category, so a copyleft license arriving through a
-      # transitive dependency fails here rather than being discovered at
-      # release time. Note the reach: this sees the Go modules recorded in the
-      # binary, not the frontend's build-time dependencies, which compile away
-      # into static assets and leave no manifest to attribute.
-      - name: Scan licenses
+      # Gate application dependencies. Debian's base-files, ca-certificates
+      # and netbase already carry GPL metadata in the pinned distroless base;
+      # report those separately instead of treating them as new Go dependencies.
+      # This does not exempt OS packages from the vulnerability gate above.
+      - name: Scan application licenses
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PKG_TYPES: library
         with:
           image-ref: beholdr:ci
           scanners: license
           severity: HIGH,CRITICAL
           exit-code: "1"
+          format: table
+
+      - name: Report base-image licenses
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PKG_TYPES: os
+        with:
+          image-ref: beholdr:ci
+          scanners: license
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          exit-code: "0"
           format: table
 
       # Same scan without the gate, so the log always carries the full picture
