@@ -63,6 +63,16 @@ and the first build may need internet access. Press Ctrl+C to stop. The built
 application is also available in `out/beholdr-demo` (`.exe` on Windows); run it
 with `-demo`. See the [demo guide](docs/local-demo.md) for the walkthrough.
 
+### Explore the observatory
+
+- **Overview** puts replica readiness gaps beside cluster capacity and resource history.
+- **Workloads** supports name, namespace and kind search, namespace filtering, and an attention-only view.
+- **Nodes** shows capacity cards with a direct path to each node's pods and workloads.
+- **Live telemetry** filters requests by service, exception or trace ID. Select a request to inspect its exception and copy the full trace ID.
+- Press **Ctrl+K** (or **Cmd+K**) from any page to find a workload, node or page. Charts support pointer inspection and a keyboard-accessible sample slider.
+
+The interface adapts to narrow screens with a collapsible navigation menu and scrollable data tables. Demo banners distinguish synthetic cluster observations from real local application telemetry.
+
 ### Connect your own cluster
 
 You need **Go 1.27.1 or newer**, **Node.js 22 with npm**, and a working kubeconfig
@@ -88,6 +98,10 @@ npm run dev
 Open [localhost:5173](http://localhost:5173). The dashboard forwards API requests
 to the backend on port 8000. Prometheus and the other integrations are optional;
 the cluster overview works without them.
+
+For frontend work against the isolated agents demo on port 8001, set
+`BEHOLDR_DEV_API_URL=http://127.0.0.1:8001` in the development server's environment
+before running `npm run dev`.
 
 For a container setup, see the [Docker instructions](docs/technical-guide.md#local-development).
 

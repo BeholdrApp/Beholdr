@@ -1,13 +1,12 @@
 <script lang="ts">
-  let { tone = "muted", children }: { tone?: "ok" | "warn" | "crit" | "muted"; children: any } = $props();
-  const tones: Record<string, string> = {
-    ok: "bg-emerald-500/15 text-emerald-400",
-    warn: "bg-amber-500/15 text-amber-400",
-    crit: "bg-rose-500/15 text-rose-400",
-    muted: "bg-slate-700/40 text-slate-300",
-  };
+  import type { Snippet } from "svelte";
+  let {
+    tone = "muted",
+    children,
+  }: { tone?: "ok" | "warn" | "crit" | "muted"; children: Snippet } = $props();
 </script>
 
-<span class="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold {tones[tone]}">
-  {@render children()}
-</span>
+<span class="status-pill {tone}"
+  ><span class="dot {tone === 'ok' ? '' : tone}" aria-hidden="true"
+  ></span>{@render children()}</span
+>

@@ -1,75 +1,180 @@
 <script lang="ts">
+  import { page } from "$app/stores";
   import { poll } from "$lib/poll.svelte.js";
   import type { MetricsStatus, Microservice } from "$lib/types.js";
   import { fmtCpu, fmtMem } from "$lib/format.js";
   import Pill from "$lib/components/Pill.svelte";
+  import Icon from "$lib/components/Icon.svelte";
   import MetricsNotice from "$lib/components/MetricsNotice.svelte";
-
-  type Resp = { updated_at: number; metrics: MetricsStatus; microservices: Microservice[] };
-  const q = poll<Resp>("/api/microservices", 5000);
-  let filter = $state("");
-
+  const q = poll<{
+    updated_at: number;
+    metrics: MetricsStatus;
+    microservices: Microservice[];
+  }>("/api/microservices", 5000);
+  let filter = $state(""),
+    namespace = $state("all"),
+    statusFilter = $state("all"),
+    sort = $state("attention");
+  $effect(() => {
+    namespace = $page.url.searchParams.get("namespace") ?? "all";
+    statusFilter =
+      $page.url.searchParams.get("attention") === "1" ? "attention" : "all";
+  });
+  const all = $derived(q.data?.microservices ?? []);
+  const namespaces = $derived([...new Set(all.map((m) => m.namespace))].sort());
+  const needsAttention = (m: Microservice) =>
+    m.ready_replicas < m.desired_replicas;
   const rows = $derived(
-    (q.data?.microservices ?? []).filter((m) =>
-      (m.name + m.namespace).toLowerCase().includes(filter.toLowerCase())
-    )
+    all
+      .filter(
+        (m) =>
+          `${m.name} ${m.namespace} ${m.kind}`
+            .toLowerCase()
+            .includes(filter.trim().toLowerCase()) &&
+          (namespace === "all" || m.namespace === namespace) &&
+          (statusFilter !== "attention" || needsAttention(m)),
+      )
+      .sort((a, b) =>
+        sort === "cpu"
+          ? b.cpu_used - a.cpu_used
+          : sort === "name"
+            ? a.name.localeCompare(b.name)
+            : Number(needsAttention(b)) - Number(needsAttention(a)) ||
+              a.name.localeCompare(b.name),
+      ),
   );
+  const reset = () => {
+    filter = "";
+    namespace = "all";
+    statusFilter = "all";
+    sort = "attention";
+  };
 </script>
 
-<h1 class="text-2xl font-semibold">Microservices</h1>
-
-{#if q.error}
-  <p class="mt-2 text-sm text-slate-400">Waiting for collector… ({q.error})</p>
-{:else if !q.data}
-  <p class="mt-2 text-sm text-slate-400">Loading…</p>
-{:else}
-  <p class="mt-1 text-xs text-slate-400">{q.data.microservices.length} workloads · scaling, autoscaling and per-service utilization</p>
-
-  <MetricsNotice metrics={q.data.metrics} scope="workloads" />
-
-  <input
-    placeholder="filter by name / namespace…"
-    bind:value={filter}
-    class="mt-4 w-72 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-2 text-sm outline-none focus:border-indigo-500"
-  />
-
-  <div class="mt-4 overflow-x-auto rounded-2xl border border-white/5">
-    <table class="w-full text-sm">
-      <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
-        <tr>
-          <th class="px-4 py-3">Microservice</th><th class="px-4 py-3">Namespace</th><th class="px-4 py-3">Replicas</th>
-          <th class="px-4 py-3">Autoscaling</th><th class="px-4 py-3">CPU</th><th class="px-4 py-3">Memory</th>
-          <th class="px-4 py-3">Req util</th><th class="px-4 py-3">Nodes</th><th class="px-4 py-3">Restarts</th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-white/5">
-        {#each rows as m (m.key)}
-          <tr class="bg-slate-900/30 hover:bg-slate-800/40">
-            <td class="px-4 py-3">
-              <a class="text-indigo-300 hover:underline" href="/microservices/{encodeURIComponent(m.namespace)}/{encodeURIComponent(m.name)}?kind={encodeURIComponent(m.kind)}">{m.name}</a>
-              <div class="text-[11px] text-slate-500">{m.kind}</div>
-            </td>
-            <td class="px-4 py-3 text-slate-400">{m.namespace}</td>
-            <td class="px-4 py-3">
-              <Pill tone={m.ready_replicas >= m.desired_replicas ? "ok" : "warn"}>{m.ready_replicas}/{m.desired_replicas}</Pill>
-            </td>
-            <td class="px-4 py-3 text-xs text-slate-400">
-              {#if m.hpa}HPA {m.hpa.min}–{m.hpa.max}{m.hpa.target_cpu_pct ? ` @${m.hpa.target_cpu_pct}%` : ""}{:else}—{/if}
-            </td>
-            <td class="px-4 py-3 tabular-nums" title={m.metrics_missing ? "Some pods have no usage sample — this is an undercount" : ""}>
-              {fmtCpu(m.cpu_used)}{#if m.metrics_missing}<span class="text-slate-500">+</span>{/if}
-            </td>
-            <td class="px-4 py-3 tabular-nums" title={m.metrics_missing ? "Some pods have no usage sample — this is an undercount" : ""}>
-              {fmtMem(m.mem_used)}{#if m.metrics_missing}<span class="text-slate-500">+</span>{/if}
-            </td>
-            <td class="px-4 py-3 tabular-nums">
-              {m.cpu_util_pct != null && !m.metrics_missing ? `${m.cpu_util_pct}%` : "—"}
-            </td>
-            <td class="px-4 py-3 text-slate-400">{m.nodes.length}</td>
-            <td class="px-4 py-3">{#if m.restarts > 0}<Pill tone="warn">{m.restarts}</Pill>{:else}{m.restarts}{/if}</td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
+<svelte:head><title>Workloads · Beholdr</title></svelte:head>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Observe / Workloads</span>
+    <h1>Every service. One view.</h1>
+    <p class="page-description">
+      Find a workload, spot a readiness gap, and follow it down to the pod.
+    </p>
   </div>
+  <span class="count-label">{all.length} observed workloads</span>
+</div>
+{#if q.error}<div class="empty-state">
+    <Icon name="alert" size={27} />
+    <h2>Workloads are temporarily unavailable</h2>
+    <p>{q.error}. The observer will retry automatically.</p>
+  </div>{:else if !q.data}<div class="empty-state">
+    <Icon name="workloads" size={28} />
+    <p>Discovering your workloads…</p>
+  </div>{:else}
+  <div class="segmented" aria-label="Workload readiness filter">
+    <button
+      aria-pressed={statusFilter === "all"}
+      onclick={() => (statusFilter = "all")}
+      >All workloads <span class="ml-2 opacity-60">{all.length}</span></button
+    ><button
+      aria-pressed={statusFilter === "attention"}
+      onclick={() => (statusFilter = "attention")}
+      >Needs attention <span class="ml-2 opacity-60"
+        >{all.filter(needsAttention).length}</span
+      ></button
+    >
+  </div>
+  <MetricsNotice metrics={q.data.metrics} scope="workloads" />
+  <div class="toolbar">
+    <label class="search-field"
+      ><Icon name="search" size={16} /><span class="sr-only"
+        >Search workloads</span
+      ><input
+        bind:value={filter}
+        placeholder="Search name, namespace, or kind…"
+      /></label
+    ><select class="filter-select" aria-label="Namespace" bind:value={namespace}
+      ><option value="all">All namespaces</option
+      >{#each namespaces as ns}<option value={ns}>{ns}</option>{/each}</select
+    ><select class="filter-select" aria-label="Sort workloads" bind:value={sort}
+      ><option value="attention">Attention first</option><option value="name"
+        >Name A–Z</option
+      ><option value="cpu">Highest CPU</option></select
+    >
+  </div>
+  {#if rows.length}<div class="table-wrap">
+      <table>
+        <thead
+          ><tr
+            ><th>Workload</th><th>Readiness</th><th>Namespace</th><th
+              >Replicas</th
+            ><th>CPU used</th><th>Memory used</th><th>Scaling</th><th
+              >Restarts</th
+            ></tr
+          ></thead
+        ><tbody
+          >{#each rows as m (m.key)}<tr
+              ><td
+                ><div class="entity-cell">
+                  <span class="entity-icon"
+                    ><Icon name="workloads" size={16} /></span
+                  >
+                  <div>
+                    <a
+                      class="entity-name"
+                      href="/microservices/{encodeURIComponent(
+                        m.namespace,
+                      )}/{encodeURIComponent(m.name)}?kind={encodeURIComponent(
+                        m.kind,
+                      )}">{m.name}</a
+                    >
+                    <div class="entity-meta">
+                      {m.kind} · {m.nodes.length} nodes
+                    </div>
+                  </div>
+                </div></td
+              ><td
+                ><Pill tone={needsAttention(m) ? "warn" : "ok"}
+                  >{needsAttention(m)
+                    ? "Needs attention"
+                    : m.desired_replicas === 0
+                      ? "Scaled to zero"
+                      : "Ready"}</Pill
+                ></td
+              ><td class="text-slate-400">{m.namespace}</td><td
+                >{m.ready_replicas}<span class="text-slate-500">
+                  / {m.desired_replicas}</span
+                ></td
+              ><td
+                title={m.metrics_missing
+                  ? "Incomplete usage; some pods have no sample"
+                  : ""}
+                >{fmtCpu(m.cpu_used)}{m.metrics_missing ? "+" : ""}
+                <div class="entity-meta">
+                  {!m.metrics_missing && m.cpu_util_pct !== null
+                    ? `${m.cpu_util_pct}% of requests`
+                    : ""}
+                </div></td
+              ><td>{fmtMem(m.mem_used)}{m.metrics_missing ? "+" : ""}</td><td
+                class="text-slate-400"
+                >{m.hpa ? `Auto · ${m.hpa.min}–${m.hpa.max}` : "Fixed"}</td
+              ><td
+                >{#if m.restarts}<Pill tone="warn">{m.restarts}</Pill
+                  >{:else}<span class="text-slate-500">0</span>{/if}</td
+              ></tr
+            >{/each}</tbody
+        >
+      </table>
+    </div>
+    <div class="mt-4 flex justify-between">
+      <span class="count-label"
+        >Showing {rows.length} of {all.length} workloads</span
+      ><span class="count-label">Select a workload to investigate →</span>
+    </div>{:else}<div class="empty-state">
+      <Icon name="search" size={28} />
+      <h2>No workloads match</h2>
+      <p>
+        Try another name or namespace, or clear the filters to see everything.
+      </p>
+      <button class="button" onclick={reset}>Clear filters</button>
+    </div>{/if}
 {/if}
