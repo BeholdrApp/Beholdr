@@ -1,0 +1,43 @@
+name: Agents demo conformance
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  otlp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: Beholdr
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: BeholdrApp/stalkr
+          ref: 217962e71f0610e697f2f931be1e5bfa482910bb
+          path: stalkr
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: BeholdrApp/net-spectatr
+          ref: 626aef6f9449e42d4e044a3aec65bcc5cf841db5
+          path: net-spectatr
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: Beholdr/go.mod
+          cache-dependency-path: '**/go.sum'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 26
+      - uses: actions/setup-dotnet@bbbb8c9ab609f9ab643834ffe948a0f577bc4c0c
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.400
+      - run: npm ci
+        working-directory: Beholdr/web
+      - run: npm run demo:agents:check
+        working-directory: Beholdr/web
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: agents-conformance-evidence
+          path: Beholdr/out/agents-run-*/

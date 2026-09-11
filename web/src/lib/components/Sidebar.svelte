@@ -2,6 +2,7 @@
   import { page } from "$app/stores";
 
   const links = [
+    { href: "/telemetry", label: "Agent telemetry", icon: "M4 12h4l3-8 3 16 3-8h3" },
     { href: "/", label: "Cluster", icon: "M3 12h18M3 6h18M3 18h18" },
     { href: "/nodes", label: "Nodes", icon: "M4 6h16v4H4zM4 14h16v4H4z" },
     { href: "/microservices", label: "Microservices", icon: "M12 2l4 7-4 7-4-7z M12 14l4 7H8z" },

@@ -10,7 +10,8 @@ import net from "node:net";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const web = path.join(root, "web");
 const dist = path.join(root, "internal/webui/dist");
-const binary = path.join(root, "out", process.platform === "win32" ? "beholdr-demo.exe" : "beholdr-demo");
+const binaryName = process.argv.includes("--agents") ? "beholdr-agents" : "beholdr-demo";
+const binary = path.join(root, "out", binaryName + (process.platform === "win32" ? ".exe" : ""));
 
 function run(command, args, cwd = root) {
   return new Promise((resolve, reject) => {
@@ -49,12 +50,13 @@ async function build() {
 
 // Fail before building if another instance owns the demo port. Otherwise a
 // smoke test could accidentally validate an older application already running.
-await new Promise((resolve, reject) => {
+if (!process.argv.includes("--build-only")) await new Promise((resolve, reject) => {
   const probe = net.createServer();
   probe.once("error", () => reject(new Error("Port 8000 is already in use. Stop the existing listener before running the demo.")));
   probe.listen(8000, "127.0.0.1", () => probe.close(resolve));
 });
 await build();
+if (process.argv.includes("--build-only")) process.exit(0);
 const server = spawn(binary, ["-demo"], { cwd: root, stdio: "inherit", windowsHide: true });
 let serverError;
 server.on("error", (error) => { serverError = error; });

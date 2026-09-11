@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,17 +18,30 @@ import (
 	"github.com/beholdrapp/beholdr/internal/config"
 	"github.com/beholdrapp/beholdr/internal/demo"
 	"github.com/beholdrapp/beholdr/internal/integrations"
-	"github.com/beholdrapp/beholdr/internal/k8s"
 	"github.com/beholdrapp/beholdr/internal/servicehealth"
+	"github.com/beholdrapp/stalkr/k8s"
 )
 
 func main() {
 	demoMode := flag.Bool("demo", false, "run an isolated local demo with synthetic data")
+	telemetryFile := flag.String("demo-telemetry-file", "", "local Collector JSON export to preview (requires -demo)")
+	demoPort := flag.Int("demo-port", 8000, "loopback demo listen port")
 	flag.Parse()
+	if *telemetryFile != "" && !*demoMode {
+		slog.Error("-demo-telemetry-file requires -demo")
+		os.Exit(1)
+	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(log)
 
 	cfg := runtimeConfig(*demoMode)
+	if *demoMode {
+		if *demoPort < 1 || *demoPort > 65535 {
+			slog.Error("invalid demo port")
+			os.Exit(1)
+		}
+		cfg.Addr = fmt.Sprintf("127.0.0.1:%d", *demoPort)
+	}
 	if err := cfg.Validate(); err != nil {
 		log.Error("configuration", "err", err)
 		os.Exit(1)
@@ -84,6 +98,7 @@ func main() {
 	}
 	apiServer := api.NewServer(col, integrationMonitor, health, cfg.CORSOrigins, log)
 	apiServer.Demo = *demoMode
+	apiServer.TelemetryFile = *telemetryFile
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,

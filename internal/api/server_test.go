@@ -20,8 +20,8 @@ import (
 
 	"github.com/beholdrapp/beholdr/internal/collect"
 	"github.com/beholdrapp/beholdr/internal/integrations"
-	"github.com/beholdrapp/beholdr/internal/k8s"
 	"github.com/beholdrapp/beholdr/internal/servicehealth"
+	"github.com/beholdrapp/stalkr/k8s"
 )
 
 func testLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }

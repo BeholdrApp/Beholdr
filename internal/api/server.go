@@ -14,12 +14,14 @@ import (
 	"github.com/beholdrapp/beholdr/internal/collect"
 	"github.com/beholdrapp/beholdr/internal/integrations"
 	"github.com/beholdrapp/beholdr/internal/servicehealth"
+	"github.com/beholdrapp/beholdr/internal/telemetrypreview"
 	"github.com/beholdrapp/beholdr/internal/webui"
 )
 
 type Server struct {
 	// Demo labels synthetic data. Set once before serving requests.
 	Demo          bool
+	TelemetryFile string
 	col           *collect.Collector
 	integrations  *integrations.Monitor
 	serviceHealth *servicehealth.Service
@@ -52,6 +54,7 @@ func (s *Server) Handler() http.Handler {
 	// render last-success/last-error without treating "not ready yet" as a
 	// network failure.
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("GET /api/telemetry", s.telemetry)
 	mux.HandleFunc("GET /api/integrations", s.integrationStatus)
 	mux.HandleFunc("GET /api/cluster", s.cluster)
 	mux.HandleFunc("GET /api/nodes", s.nodes)
@@ -123,6 +126,7 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":                true,
 		"demo":              s.Demo,
+		"agent_telemetry":   s.Demo && s.TelemetryFile != "",
 		"ready":             hs.Ready,
 		"last_success":      hs.LastSuccess,
 		"last_error":        hs.LastError,
@@ -340,4 +344,17 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *Server) telemetry(w http.ResponseWriter, r *http.Request) {
+	file := ""
+	if s.Demo {
+		file = s.TelemetryFile
+	}
+	snapshot, err := telemetrypreview.Read(file)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "local telemetry export is unavailable"})
+		return
+	}
+	writeJSON(w, http.StatusOK, snapshot)
 }
