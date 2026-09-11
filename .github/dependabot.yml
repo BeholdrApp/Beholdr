@@ -36,4 +36,5 @@ updates:
     labels: ["security"]
     groups:
       frontend-toolchain:
-        patterns: ["vite", "vitest", "@sveltejs/*", "svelte", "svelte-check", "typescript"]
+        # TypeScript stays separate until svelte-check supports its next major.
+        patterns: ["vite", "vitest", "@sveltejs/*", "svelte", "svelte-check"]

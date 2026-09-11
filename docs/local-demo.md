@@ -5,7 +5,7 @@ an organization's clusters are separate future steps.
 
 ## Start
 
-Install Go 1.25.14 or newer and Node.js 22 with npm. From the repository root:
+Install Go 1.27.1 or newer and Node.js 22 with npm. From the repository root:
 
 ```sh
 cd web
