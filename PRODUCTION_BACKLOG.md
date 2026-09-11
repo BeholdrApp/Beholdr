@@ -75,6 +75,15 @@ labeled preview may still ship early.
   release build (see below), with the Go build toolchain and frontend build
   toolchain deliberately upgraded rather than accepting `npm audit fix
   --force`'s downgrade suggestions.
+- [x] Supply-chain hardening
+  ([#6](https://github.com/BeholdrApp/Beholdr/issues/6)): every base image
+  pinned by digest and every GitHub Action by commit SHA (a floating tag
+  silently changes what a reproducible build produces), Dependabot watching
+  those pins so they cannot rot, SBOM and `mode=max` build provenance attached
+  to every published image as registry attestations plus a downloadable
+  workflow artifact, and a Trivy scan of the *built image* in CI — which
+  reaches the Go standard library inside the binary, the surface the
+  2026-09-05 triage found dependency scanning had missed.
 - [x] Correct collector metric availability under failure
   ([#5](https://github.com/BeholdrApp/Beholdr/issues/5)): availability is
   derived per collection and carried in the snapshot instead of latched onto
@@ -107,24 +116,31 @@ labeled preview may still ship early.
   `@sveltejs/adapter-static`/`svelte-check`/`typescript` bumped to their
   latest compatible releases, verified with a clean `npm run check` and
   `npm run build`.
+- **Caught by the new image gate (2026-09-09).** The first CI run of the Trivy
+  scan added in [#6](https://github.com/BeholdrApp/Beholdr/issues/6) blocked on
+  CVE-2026-46600 — a denial of service in `golang.org/x/net/dns/dnsmessage`,
+  HIGH, present in the built binary at v0.55.0 and fixed in v0.56.0. Bumped.
+  Worth recording as evidence for the gate: `govulncheck` classes the same
+  advisory as *not reachable* from Beholdr's code, so a reachability-only check
+  would have let it ship. Scanning the artifact for what is *present* and the
+  source for what is *reached* answer different questions, and this is a case
+  where they disagreed.
 - **Remaining, accepted.** One low-severity finding (`cookie` < 0.7.0,
   GHSA-pxg6-pf52-xh8x) is pinned by `@sveltejs/kit`@2.70.3, the latest
   stable release — the fix ships only in SvelteKit's 3.0.0 prerelease line.
   Beholdr uses `adapter-static` (a prerendered SPA with no SvelteKit server
   runtime or cookie handling in production), so this finding is not
   reachable in the shipped app. Revisit once SvelteKit 3 stabilizes.
-- **Proposed severity policy** (needs explicit sign-off before it gates
-  releases): block a release on any *reachable* high/critical finding in
-  the built binary/image or the production frontend bundle; track
-  dev-toolchain-only and non-reachable findings here instead of blocking on
-  them. Continuous enforcement (running `govulncheck`/`npm audit` in CI) is
-  still open — see "Finish automated quality gates" below.
+- **Severity policy** (signed off 2026-09-09, enforced in CI): a HIGH or
+  CRITICAL finding in the built image blocks the pull request **when a fix is
+  available**. Unfixed findings are reported in the job log but do not block —
+  an unfixable upstream CVE must not wedge every pull request. Dev-toolchain
+  and non-reachable findings are tracked here rather than gating. Widen the
+  gate by setting `ignore-unfixed: false` in `.github/workflows/ci.yml`.
+  Source-level enforcement (`govulncheck`/`npm audit`) is still open — see
+  "Finish automated quality gates" below.
 
 ## P0 — remaining release blockers
-
-- [ ] **Finish supply-chain hardening** ([#6](https://github.com/BeholdrApp/Beholdr/issues/6))**.** Dependency locks and deterministic
-  builds are in place. Pin base images and GitHub Actions by digest/immutable
-  revision, generate an SBOM, and scan image/dependencies in CI.
 
 - [ ] **Finish automated quality gates** ([#7](https://github.com/BeholdrApp/Beholdr/issues/7))**.** Backend/frontend tests and builds plus
   the container build run on pull requests. Add IaC validation, vulnerability

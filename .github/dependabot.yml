@@ -1,0 +1,33 @@
+# Digest-pinned base images and SHA-pinned actions are immutable by design —
+# which means nothing updates them unless something is watching. Without this
+# file the pins added for #6 would quietly rot into stale, unpatched versions,
+# which is a worse position than the floating tags they replaced.
+version: 2
+updates:
+  # Base images in the Dockerfile. Dependabot rewrites the digest and the
+  # human-readable tag beside it together.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["security", "ci"]
+
+  # Action pins in .github/workflows/. Keeps the # vN comment in step with the
+  # SHA it annotates.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["security", "ci"]
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    labels: ["security"]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    labels: ["security"]
