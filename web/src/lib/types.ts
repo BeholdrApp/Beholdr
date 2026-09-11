@@ -56,6 +56,7 @@ export type Point = Record<string, number>;
 export interface Health {
   ok: boolean;
   demo?: boolean;
+  agent_telemetry?: boolean;
   ready: boolean;
   last_success: number;
   last_error: string;

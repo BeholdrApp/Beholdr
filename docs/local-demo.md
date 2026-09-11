@@ -62,3 +62,5 @@ with `go test ./...` from the repository root.
 If port 8000 is in use, stop the other local listener before starting the demo.
 The synthetic data is in memory and resets on restart. No organization names,
 cloud subscription identifiers or real cluster names belong in demo fixtures.
+
+For live local agent telemetry, use the separate [agents demo](agents-demo.md).

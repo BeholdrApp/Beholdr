@@ -119,6 +119,20 @@ Record the decisions, then build the seams everything else depends on.
 First supported release. Load and security tested, documented supported scale,
 both deployment profiles verified, every port covered by its conformance suite.
 
+## Agent preview delivered
+
+The collection library and its tests are extracted into stalkr; Beholdr imports
+that module and retains its own bounded chart history. stalkr exports standard
+Kubernetes OTLP metrics. net-spectatr instruments .NET 8/10 applications using
+upstream SDK packages. The isolated [agents demo](docs/agents-demo.md) verifies
+both agents plus a stock .NET SDK control through the official Collector and
+shows recent telemetry in Beholdr.
+
+This is an application preview. Production gaze authentication/tenancy, lair
+storage, enrollment, full inventory synchronization, package signing/publishing
+and real cluster deployment conformance remain open. No infrastructure is
+provisioned by the preview.
+
 ## Delivery target
 
 Develop and validate Beholdr as an independent project first. The local demo

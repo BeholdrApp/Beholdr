@@ -12,7 +12,7 @@
 
 {#if q.data?.demo}
   <div class="mb-5 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-4 py-2.5 text-sm text-indigo-200">
-    <span class="font-semibold">Local demo</span> · Synthetic sample data. No cluster or external service is connected.
+    <span class="font-semibold">Local demo</span> · {q.data.agent_telemetry ? "Synthetic cluster inputs with live local agent telemetry." : "Synthetic sample data. No cluster or external service is connected."}
   </div>
 {/if}
 
