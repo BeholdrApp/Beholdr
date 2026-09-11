@@ -3,13 +3,20 @@ export const fmtCpu = (m: number): string =>
 
 export const fmtMem = (b: number): string => {
   const u = ["B", "KiB", "MiB", "GiB", "TiB"];
-  let i = 0, v = b;
-  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  let i = 0,
+    v = b;
+  while (v >= 1024 && i < u.length - 1) {
+    v /= 1024;
+    i++;
+  }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
 };
 
 export const fmtTime = (unix: number): string =>
-  new Date(unix * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  new Date(unix * 1000).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 // Same as fmtTime but prefixed with the date, for axis labels on windows that
 // span more than a day (a bare HH:mm is ambiguous across midnight).
@@ -22,7 +29,7 @@ export const fmtTimeWithDate = (unix: number): string => {
 
 // status color ramp for utilization percentages
 export const usageColor = (p: number): string =>
-  p >= 85 ? "#f43f5e" : p >= 65 ? "#f59e0b" : "#10b981";
+  p >= 85 ? "#fb927e" : p >= 65 ? "#eac082" : "#b9de8b";
 
 export const usageTone = (p: number): "ok" | "warn" | "crit" =>
   p >= 85 ? "crit" : p >= 65 ? "warn" : "ok";

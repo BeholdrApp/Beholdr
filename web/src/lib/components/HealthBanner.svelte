@@ -11,22 +11,33 @@
 </script>
 
 {#if q.data?.demo}
-  <div class="mb-5 rounded-lg border border-indigo-400/30 bg-indigo-500/10 px-4 py-2.5 text-sm text-indigo-200">
-    <span class="font-semibold">Local demo</span> · {q.data.agent_telemetry ? "Synthetic cluster inputs with live local agent telemetry." : "Synthetic sample data. No cluster or external service is connected."}
+  <div class="demo-notice">
+    <span class="dot muted"></span><span
+      ><strong>Demo workspace</strong> · {q.data.agent_telemetry
+        ? "Synthetic cluster · real local application telemetry"
+        : "Synthetic cluster data. Explore freely."}</span
+    ><a href="/telemetry">View live telemetry ↗</a>
   </div>
 {/if}
 
 {#if q.error}
-  <div role="alert" class="mb-5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300">
+  <div
+    role="alert"
+    class="mb-5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300"
+  >
     Cannot reach Beholdr. Displayed data may be out of date.
   </div>
 {/if}
 
 {#if q.data && !q.data.ready}
-  <div class="mb-5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300">
+  <div
+    class="mb-5 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm text-rose-300"
+  >
     <div class="font-medium">
       {#if q.data.last_success}
-        Collector data is stale — last successful collection {fmtTime(q.data.last_success)}.
+        Collector data is stale — last successful collection {fmtTime(
+          q.data.last_success,
+        )}.
       {:else}
         Waiting for the first successful collection…
       {/if}

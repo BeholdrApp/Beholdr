@@ -2,15 +2,24 @@
   import { page } from "$app/stores";
   import { poll } from "$lib/poll.svelte.js";
   import { metricsViewState } from "$lib/metricsView.js";
-  import type { Microservice, PodInfo, Point, ServiceMetricSignal, ServiceMetricsReport, ServiceSeverity } from "$lib/types.js";
+  import type {
+    Microservice,
+    PodInfo,
+    Point,
+    ServiceMetricSignal,
+    ServiceMetricsReport,
+    ServiceSeverity,
+  } from "$lib/types.js";
   import { fmtCpu, fmtMem } from "$lib/format.js";
   import StatCard from "$lib/components/StatCard.svelte";
   import Pill from "$lib/components/Pill.svelte";
   import TimeChart from "$lib/components/TimeChart.svelte";
 
   type Resp = { microservice: Microservice; pods: PodInfo[]; history: Point[] };
-  const apiPath = () => `/api/microservices/${encodeURIComponent($page.params.ns ?? "")}/${encodeURIComponent($page.params.name ?? "")}`;
-  const kindQuery = () => `kind=${encodeURIComponent($page.url.searchParams.get("kind") ?? "")}`;
+  const apiPath = () =>
+    `/api/microservices/${encodeURIComponent($page.params.ns ?? "")}/${encodeURIComponent($page.params.name ?? "")}`;
+  const kindQuery = () =>
+    `kind=${encodeURIComponent($page.url.searchParams.get("kind") ?? "")}`;
   const q = poll<Resp>(() => `${apiPath()}?${kindQuery()}`, 5000);
   let metricsWindow = $state("24h");
   const metrics = poll<ServiceMetricsReport>(
@@ -19,16 +28,18 @@
   );
   const windows = ["1h", "6h", "24h", "7d", "21d"];
 
-  const tone = (severity: ServiceSeverity) => ({
-    healthy: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-    warning: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-    critical: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-    unknown: "border-slate-500/30 bg-slate-500/10 text-slate-400",
-  })[severity];
+  const tone = (severity: ServiceSeverity) =>
+    ({
+      healthy: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+      warning: "border-amber-500/30 bg-amber-500/10 text-amber-300",
+      critical: "border-rose-500/30 bg-rose-500/10 text-rose-300",
+      unknown: "border-slate-500/30 bg-slate-500/10 text-slate-400",
+    })[severity];
 
   // The API already says what each signal is measured in; the UI must not keep
   // a second, divergent opinion keyed off the signal name.
-  const isPercent = (signal: ServiceMetricSignal) => signal.unit.trim().startsWith("%");
+  const isPercent = (signal: ServiceMetricSignal) =>
+    signal.unit.trim().startsWith("%");
 
   function metricValue(signal: ServiceMetricSignal): string {
     if (signal.current == null) return "—";
@@ -49,7 +60,7 @@
         : "";
 </script>
 
-<a class="text-xs text-indigo-300 hover:underline" href="/microservices">← Microservices</a>
+<a class="text-link" href="/microservices">← All workloads</a>
 
 {#if q.error}
   <p class="mt-2 text-sm text-slate-400">Not found ({q.error})</p>
@@ -57,14 +68,39 @@
   <p class="mt-2 text-sm text-slate-400">Loading…</p>
 {:else}
   {@const m = q.data.microservice}
-  <h1 class="mt-1 text-2xl font-semibold">{m.name}</h1>
-  <p class="mt-1 text-xs text-slate-400">{m.namespace} · {m.kind}</p>
+  <div class="page-heading">
+    <div>
+      <span class="eyebrow mt-5">Workload / {m.namespace}</span>
+      <h1>{m.name}</h1>
+      <p class="page-description">
+        {m.kind} · {m.running_pods} running pods across {m.nodes.length} nodes
+      </p>
+    </div>
+    <Pill tone={m.ready_replicas < m.desired_replicas ? "warn" : "ok"}
+      >{m.ready_replicas < m.desired_replicas
+        ? "Readiness needs attention"
+        : "Desired readiness met"}</Pill
+    >
+  </div>
+  <nav class="investigation-tabs" aria-label="Workload sections">
+    <a href="#health">Service health</a><a href="#history"
+      >Scaling & resource history</a
+    ><a href="#pods"
+      >Pods <span class="ml-1 opacity-60">{q.data.pods.length}</span></a
+    ><a href="/telemetry">Live telemetry ↗</a>
+  </nav>
 
   <div class="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-5">
     <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
-      <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Replicas</div>
-      <div class="mt-1.5 text-3xl font-semibold tabular-nums">{m.ready_replicas}/{m.desired_replicas}</div>
-      <div class="mt-1 text-xs text-slate-400">{m.running_pods} running pods</div>
+      <div class="text-xs font-medium uppercase tracking-wide text-slate-400">
+        Replicas
+      </div>
+      <div class="mt-1.5 text-3xl font-semibold tabular-nums">
+        {m.ready_replicas}/{m.desired_replicas}
+      </div>
+      <div class="mt-1 text-xs text-slate-400">
+        {m.running_pods} running pods
+      </div>
     </div>
     <StatCard
       label="CPU (sum)"
@@ -78,59 +114,98 @@
     <StatCard
       label="Memory (sum)"
       value={m.metrics_missing ? `${fmtMem(m.mem_used)}+` : fmtMem(m.mem_used)}
-      sub={m.metrics_missing ? "undercount — some pods have no usage sample" : ""}
+      sub={m.metrics_missing
+        ? "undercount — some pods have no usage sample"
+        : ""}
     />
     <StatCard label="Spread" value={`${m.nodes.length} nodes`} />
     {#if m.hpa}
       <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
-        <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Autoscaler</div>
-        <div class="mt-1.5 text-3xl font-semibold tabular-nums">{m.hpa.current}</div>
+        <div class="text-xs font-medium uppercase tracking-wide text-slate-400">
+          Autoscaler
+        </div>
+        <div class="mt-1.5 text-3xl font-semibold tabular-nums">
+          {m.hpa.current}
+        </div>
         <div class="mt-1 text-xs text-slate-400">
           range {m.hpa.min}–{m.hpa.max} · desired {m.hpa.desired}
-          {#if m.hpa.target_cpu_pct != null}· CPU {m.hpa.current_cpu_pct ?? "?"}%/{m.hpa.target_cpu_pct}%{/if}
+          {#if m.hpa.target_cpu_pct != null}· CPU {m.hpa.current_cpu_pct ??
+              "?"}%/{m.hpa.target_cpu_pct}%{/if}
         </div>
       </div>
     {/if}
   </div>
 
-  <div class="mt-8 flex flex-wrap items-center justify-between gap-3">
+  <div
+    id="health"
+    class="mt-8 flex flex-wrap items-center justify-between gap-3"
+  >
     <div>
-      <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Service health</h2>
-      <p class="mt-1 text-xs text-slate-500">Prometheus-backed signals and alert thresholds</p>
+      <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+        Service health
+      </h2>
+      <p class="mt-1 text-xs text-slate-500">
+        Current signals, thresholds, and historical comparison
+      </p>
     </div>
-    <div class="flex rounded-lg border border-white/10 bg-slate-900/60 p-1">
+    <div class="segmented" aria-label="Service health time range">
       {#each windows as window}
         <button
           type="button"
-          onclick={() => metricsWindow = window}
-          class="rounded-md px-2.5 py-1 text-xs transition-colors {metricsWindow === window ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-slate-200'}"
-        >{window}</button>
+          onclick={() => (metricsWindow = window)}
+          aria-pressed={metricsWindow === window}
+          class="rounded-md px-2.5 py-1 text-xs transition-colors {metricsWindow ===
+          window
+            ? 'bg-indigo-500 text-white'
+            : 'text-slate-400 hover:text-slate-200'}">{window}</button
+        >
       {/each}
     </div>
   </div>
 
   {@const view = metricsViewState(metrics.data, metrics.error, metricsWindow)}
   {#if view === "error"}
-    <div class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-      Long-range service metrics are unavailable ({metrics.error}). Configure Prometheus on the Observability page.
+    <div
+      class="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+    >
+      Long-range service metrics are unavailable ({metrics.error}). Check the
+      provider connection on the Integrations page.
     </div>
   {:else if view === "pending"}
-    <p class="mt-4 text-sm text-slate-400">Loading {metricsWindow} service metrics…</p>
+    <p class="mt-4 text-sm text-slate-400">
+      Loading {metricsWindow} service metrics…
+    </p>
   {:else if metrics.data}
     <div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {#each metrics.data.signals as signal}
         <section class="rounded-2xl border border-white/5 bg-slate-900/60 p-4">
           <div class="flex items-start justify-between gap-2">
-            <div class="text-xs font-medium uppercase tracking-wide text-slate-400">{signal.label}</div>
-            <span class={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${tone(signal.severity)}`}>{signal.severity}</span>
+            <div
+              class="text-xs font-medium uppercase tracking-wide text-slate-400"
+            >
+              {signal.label}
+            </div>
+            <span
+              class={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${tone(signal.severity)}`}
+              >{signal.severity}</span
+            >
           </div>
-          <div class="mt-2 text-2xl font-semibold tabular-nums">{metricValue(signal)}</div>
+          <div class="mt-2 text-2xl font-semibold tabular-nums">
+            {metricValue(signal)}
+          </div>
           {#if signal.key === "error_rate" && signal.difference != null}
-            <div class="mt-1 text-xs {signal.difference > 0 ? 'text-rose-300' : 'text-emerald-300'}">
-              {signal.difference > 0 ? "+" : ""}{signal.difference.toFixed(2)} percentage points vs week before
+            <div
+              class="mt-1 text-xs {signal.difference > 0
+                ? 'text-rose-300'
+                : 'text-emerald-300'}"
+            >
+              {signal.difference > 0 ? "+" : ""}{signal.difference.toFixed(2)} percentage
+              points vs week before
             </div>
           {:else}
-            <div class="mt-1 text-xs text-slate-500">{thresholdLabel(signal)}</div>
+            <div class="mt-1 text-xs text-slate-500">
+              {thresholdLabel(signal)}
+            </div>
           {/if}
           {#if signal.state === "error"}
             <p class="mt-2 text-xs text-amber-300">{signal.error}</p>
@@ -143,8 +218,8 @@
 
     {#if !metrics.data.compared}
       <p class="mt-3 text-xs text-slate-500">
-        The week-before overlay is only shown up to the 7d window; beyond that it would overlap the current series
-        rather than compare against it.
+        The week-before overlay is only shown up to the 7d window; beyond that
+        it would overlap the current series rather than compare against it.
       </p>
     {/if}
 
@@ -155,14 +230,26 @@
             <h3 class="text-sm font-medium text-slate-300">{signal.label}</h3>
             <span class="text-[11px] text-slate-500">{signal.unit}</span>
           </div>
-          <TimeChart data={signal.points} height={180} unit={isPercent(signal) ? "%" : ""} lines={signal.lines} />
-          <p class="mt-1 text-[11px] leading-5 text-slate-500">{signal.description}</p>
+          <TimeChart
+            data={signal.points}
+            height={180}
+            unit={isPercent(signal) ? "%" : ""}
+            lines={signal.lines}
+          />
+          <p class="mt-1 text-[11px] leading-5 text-slate-500">
+            {signal.description}
+          </p>
         </section>
       {/each}
     </div>
   {/if}
 
-  <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Scaling history</h2>
+  <h2
+    id="history"
+    class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400"
+  >
+    Scaling history
+  </h2>
   <TimeChart
     data={q.data.history}
     height={180}
@@ -172,27 +259,63 @@
     ]}
   />
 
-  <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">CPU history</h2>
-  <TimeChart data={q.data.history} height={180} lines={[{ key: "cpu_used", label: "CPU (m)", color: "#818cf8" }]} />
+  <h2
+    class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400"
+  >
+    CPU history
+  </h2>
+  <TimeChart
+    data={q.data.history}
+    height={180}
+    lines={[{ key: "cpu_used", label: "CPU (m)", color: "#818cf8" }]}
+  />
 
-  <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Pods ({q.data.pods.length})</h2>
+  <h2
+    id="pods"
+    class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400"
+  >
+    Pods ({q.data.pods.length})
+  </h2>
   <div class="overflow-x-auto rounded-2xl border border-white/5">
     <table class="w-full text-sm">
-      <thead class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
-        <tr><th class="px-4 py-3">Pod</th><th class="px-4 py-3">Node</th><th class="px-4 py-3">Phase</th>
-          <th class="px-4 py-3">CPU</th><th class="px-4 py-3">Memory</th><th class="px-4 py-3">Restarts</th></tr>
+      <thead
+        class="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400"
+      >
+        <tr
+          ><th class="px-4 py-3">Pod</th><th class="px-4 py-3">Node</th><th
+            class="px-4 py-3">Phase</th
+          >
+          <th class="px-4 py-3">CPU</th><th class="px-4 py-3">Memory</th><th
+            class="px-4 py-3">Restarts</th
+          ></tr
+        >
       </thead>
       <tbody class="divide-y divide-white/5">
         {#each q.data.pods as p (p.name)}
           <tr class="bg-slate-900/30 hover:bg-slate-800/40">
             <td class="px-4 py-3 font-mono text-[12px]">{p.name}</td>
-            <td class="px-4 py-3"><a class="text-indigo-300 hover:underline" href="/nodes/{p.node}">{p.node}</a></td>
-            <td class="px-4 py-3"><Pill tone={p.phase === "Running" && !p.status_reason ? "ok" : "warn"}>{p.status_reason || p.phase}</Pill></td>
+            <td class="px-4 py-3"
+              ><a class="text-indigo-300 hover:underline" href="/nodes/{p.node}"
+                >{p.node}</a
+              ></td
+            >
+            <td class="px-4 py-3"
+              ><Pill
+                tone={p.phase === "Running" && !p.status_reason ? "ok" : "warn"}
+                >{p.status_reason || p.phase}</Pill
+              ></td
+            >
             <td class="px-4 py-3 tabular-nums">
-              {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtCpu(p.cpu_used)}{/if}
+              {#if p.metrics_missing}<span
+                  class="text-slate-500"
+                  title="No usage sample for this pod">—</span
+                >{:else}{fmtCpu(p.cpu_used)}{/if}
             </td>
             <td class="px-4 py-3 tabular-nums">
-              {#if p.metrics_missing}<span class="text-slate-500" title="No usage sample for this pod">—</span>{:else}{fmtMem(p.mem_used)}{/if}
+              {#if p.metrics_missing}<span
+                  class="text-slate-500"
+                  title="No usage sample for this pod">—</span
+                >{:else}{fmtMem(p.mem_used)}{/if}
             </td>
             <td class="px-4 py-3 tabular-nums">{p.restarts}</td>
           </tr>

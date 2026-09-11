@@ -1,84 +1,225 @@
 <script lang="ts">
   import { poll } from "$lib/poll.svelte.js";
-  import type { Cluster, MetricsStatus, Point } from "$lib/types.js";
+  import type {
+    Cluster,
+    MetricsStatus,
+    Point,
+    Microservice,
+  } from "$lib/types.js";
   import { fmtCpu, fmtMem, fmtTime } from "$lib/format.js";
   import StatCard from "$lib/components/StatCard.svelte";
-  import UsageBar from "$lib/components/UsageBar.svelte";
   import TimeChart from "$lib/components/TimeChart.svelte";
   import MetricsNotice from "$lib/components/MetricsNotice.svelte";
-
-  type Resp = {
+  import Icon from "$lib/components/Icon.svelte";
+  import Pill from "$lib/components/Pill.svelte";
+  const q = poll<{
     updated_at: number;
     metrics_available: boolean;
     metrics: MetricsStatus;
     cluster: Cluster;
     history: Point[];
-  };
-  const q = poll<Resp>("/api/cluster", 5000);
+  }>("/api/cluster", 5000);
+  const workloads = poll<{ microservices: Microservice[] }>(
+    "/api/microservices",
+    5000,
+  );
+  const attention = $derived(
+    (workloads.data?.microservices ?? []).filter(
+      (m) => m.ready_replicas < m.desired_replicas,
+    ),
+  );
+  const workloadUrl = (m: Microservice) =>
+    `/microservices/${encodeURIComponent(m.namespace)}/${encodeURIComponent(m.name)}?kind=${encodeURIComponent(m.kind)}`;
 </script>
 
-<h1 class="text-2xl font-semibold">Cluster overview</h1>
-
-{#if q.error}
-  <p class="mt-2 text-sm text-slate-400">Waiting for collector… ({q.error})</p>
-{:else if !q.data}
-  <p class="mt-2 text-sm text-slate-400">Loading…</p>
-{:else}
-  {@const c = q.data.cluster}
-  <p class="mt-1 text-xs text-slate-400">Updated {fmtTime(q.data.updated_at)}</p>
-
-  <MetricsNotice metrics={q.data.metrics} />
-
-  <div class="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-5">
-    <StatCard label="Nodes" value={`${c.nodes_ready}/${c.nodes_total}`} sub="ready / total" />
-    <StatCard label="Microservices" value={c.microservices_total} />
-    <StatCard
-      label="Pods"
-      value={c.pods_total}
-      sub={Object.entries(c.pods_by_phase).map(([k, v]) => `${v} ${k}`).join(" · ")}
-    />
-    <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
-      <div class="text-xs font-medium uppercase tracking-wide text-slate-400">CPU</div>
-      {#if !q.data.metrics_available}
-        <div class="mt-1.5 text-3xl font-semibold text-slate-500" title="No usage sample — not a measurement of zero">—</div>
-        <div class="mt-1 text-xs text-slate-400">capacity {fmtCpu(c.cpu_capacity)}</div>
-      {:else}
-        <div class="mt-1.5 text-3xl font-semibold tabular-nums">{c.cpu_pct}%</div>
-        <div class="mt-1 text-xs text-slate-400">
-          {fmtCpu(c.cpu_used)} / {fmtCpu(c.cpu_capacity)}{c.metrics_missing ? "+" : ""}
-        </div>
-        <div class="mt-3"><UsageBar pct={c.cpu_pct} /></div>
-      {/if}
-    </div>
-    <div class="rounded-2xl border border-white/5 bg-slate-900/60 p-5">
-      <div class="text-xs font-medium uppercase tracking-wide text-slate-400">Memory</div>
-      {#if !q.data.metrics_available}
-        <div class="mt-1.5 text-3xl font-semibold text-slate-500" title="No usage sample — not a measurement of zero">—</div>
-        <div class="mt-1 text-xs text-slate-400">capacity {fmtMem(c.mem_capacity)}</div>
-      {:else}
-        <div class="mt-1.5 text-3xl font-semibold tabular-nums">{c.mem_pct}%</div>
-        <div class="mt-1 text-xs text-slate-400">
-          {fmtMem(c.mem_used)} / {fmtMem(c.mem_capacity)}{c.metrics_missing ? "+" : ""}
-        </div>
-        <div class="mt-3"><UsageBar pct={c.mem_pct} /></div>
-      {/if}
-    </div>
+<svelte:head><title>Overview · Beholdr</title></svelte:head>
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">The observatory / Overview</span>
+    <h1>Your cluster, in focus.</h1>
+    <p class="page-description">
+      A clear view of your infrastructure. A shorter path to what needs you.
+    </p>
   </div>
-
-  <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Utilization history</h2>
-  <TimeChart
-    data={q.data.history}
-    unit="%"
-    lines={[
-      { key: "cpu_pct", label: "CPU %", color: "#818cf8" },
-      { key: "mem_pct", label: "Memory %", color: "#10b981" },
-    ]}
-  />
-
-  <h2 class="mb-3 mt-8 text-xs font-semibold uppercase tracking-wider text-slate-400">Running pods</h2>
-  <TimeChart
-    data={q.data.history}
-    height={160}
-    lines={[{ key: "pods_running", label: "Running pods", color: "#f59e0b" }]}
-  />
+  <a class="button primary" href="/microservices"
+    >Explore workloads <Icon name="arrow" size={15} /></a
+  >
+</div>
+{#if q.error}<div class="empty-state">
+    <Icon name="alert" size={28} />
+    <h2>We lost the observer connection</h2>
+    <p>Beholdr will reconnect automatically. {q.error}</p>
+  </div>{:else if !q.data}<div class="empty-state">
+    <Icon name="eye" size={30} />
+    <h2>Bringing your cluster into focus</h2>
+    <p>Waiting for the first observation…</p>
+  </div>{:else}
+  {@const c = q.data.cluster}
+  <MetricsNotice metrics={q.data.metrics} />
+  <div class="stats-grid">
+    <StatCard
+      label="Nodes ready"
+      value={`${c.nodes_ready} / ${c.nodes_total}`}
+      sub="Observed cluster capacity"
+      icon="nodes"
+      accent
+    />
+    <StatCard
+      label="Running pods"
+      value={`${c.pods_by_phase.Running ?? 0} / ${c.pods_total}`}
+      sub={`${c.microservices_total} workloads across the cluster`}
+      icon="workloads"
+      accent
+    />
+    <StatCard
+      label="CPU utilization"
+      value={!q.data.metrics_available
+        ? "Unmeasured"
+        : `${c.cpu_pct}%${c.metrics_missing ? "+" : ""}`}
+      sub={`${fmtCpu(c.cpu_capacity)} total capacity`}
+      icon="cpu"
+      accent
+    />
+    <StatCard
+      label="Memory utilization"
+      value={!q.data.metrics_available
+        ? "Unmeasured"
+        : `${c.mem_pct}%${c.metrics_missing ? "+" : ""}`}
+      sub={`${fmtMem(c.mem_capacity)} total capacity`}
+      icon="pulse"
+      accent
+    />
+  </div>
+  <div class="hero-grid">
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Resource pulse</h2>
+          <p>CPU and memory · recent observer history</p>
+        </div>
+        <span class="count-label">As of {fmtTime(q.data.updated_at)}</span>
+      </div>
+      <div class="p-4">
+        <TimeChart
+          data={q.data.history}
+          unit="%"
+          height={240}
+          lines={[
+            { key: "cpu_pct", label: "CPU", color: "#c1ed83" },
+            { key: "mem_pct", label: "Memory", color: "#84c9c0" },
+          ]}
+        />
+      </div>
+    </section>
+    <section class="panel">
+      <div class="panel-heading">
+        <h2>On your radar</h2>
+        <Pill
+          tone={workloads.error || !workloads.data
+            ? "muted"
+            : attention.length
+              ? "warn"
+              : "ok"}
+          >{workloads.error
+            ? "Unavailable"
+            : !workloads.data
+              ? "Checking"
+              : `${attention.length} to review`}</Pill
+        >
+      </div>
+      <div class="signal-summary">
+        <div class="orbit"><Icon name="eye" /></div>
+        <div>
+          <h2>
+            {workloads.error || !workloads.data
+              ? "Awaiting workload data"
+              : attention.length
+                ? "A closer look needed."
+                : "Readiness looks good."}
+          </h2>
+          <p>
+            {workloads.error
+              ? "Workload status could not be refreshed."
+              : workloads.data
+                ? `${workloads.data.microservices.length - attention.length} of ${workloads.data.microservices.length} workloads meet their desired replica count.`
+                : "Checking workload readiness…"}
+          </p>
+        </div>
+      </div>
+      {#each attention.slice(0, 3) as m}<a
+          class="attention-row"
+          href={workloadUrl(m)}
+          ><span class="entity-icon"><Icon name="alert" size={17} /></span>
+          <div>
+            <strong>{m.name}</strong>
+            <p>
+              {m.namespace} · {m.ready_replicas} of {m.desired_replicas} replicas
+              ready
+            </p>
+          </div>
+          <span class="arrow"><Icon name="arrow" size={16} /></span></a
+        >{/each}
+      <a class="attention-row" href="/telemetry"
+        ><span class="entity-icon"><Icon name="pulse" size={17} /></span>
+        <div>
+          <strong>Follow the request</strong>
+          <p>Explore agent signals and application exceptions</p>
+        </div>
+        <span class="arrow"><Icon name="arrow" size={16} /></span></a
+      >
+    </section>
+  </div>
+  <div class="section-title">
+    <div>
+      <h2>Workload landscape</h2>
+      <p>Readiness and resource use, without the noise.</p>
+    </div>
+    <a href="/microservices" class="text-link"
+      >View all workloads <Icon name="arrow" size={15} /></a
+    >
+  </div>
+  {#if workloads.error}<div class="empty-state">
+      <p>Workload data is unavailable. Beholdr will retry automatically.</p>
+    </div>{:else if workloads.data}<div class="table-wrap">
+      <table>
+        <thead
+          ><tr
+            ><th>Workload</th><th>Readiness</th><th>Namespace</th><th
+              >CPU used</th
+            ><th>Memory used</th><th>Replicas</th></tr
+          ></thead
+        ><tbody
+          >{#each [...workloads.data.microservices]
+            .sort((a, b) => Number(b.ready_replicas < b.desired_replicas) - Number(a.ready_replicas < a.desired_replicas))
+            .slice(0, 6) as m}<tr
+              ><td
+                ><div class="entity-cell">
+                  <span class="entity-icon"
+                    ><Icon name="workloads" size={16} /></span
+                  >
+                  <div>
+                    <a class="entity-name" href={workloadUrl(m)}>{m.name}</a>
+                    <div class="entity-meta">{m.kind}</div>
+                  </div>
+                </div></td
+              ><td
+                ><Pill
+                  tone={m.ready_replicas < m.desired_replicas ? "warn" : "ok"}
+                  >{m.ready_replicas < m.desired_replicas
+                    ? "Needs attention"
+                    : m.desired_replicas === 0
+                      ? "Scaled to zero"
+                      : "Ready"}</Pill
+                ></td
+              ><td class="text-slate-400">{m.namespace}</td><td
+                >{fmtCpu(m.cpu_used)}{m.metrics_missing ? "+" : ""}</td
+              ><td>{fmtMem(m.mem_used)}{m.metrics_missing ? "+" : ""}</td><td
+                >{m.ready_replicas}<span class="text-slate-500">
+                  / {m.desired_replicas}</span
+                ></td
+              ></tr
+            >{/each}</tbody
+        >
+      </table>
+    </div>{/if}
 {/if}
