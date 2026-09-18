@@ -5,7 +5,7 @@
 # floating tag silently changes the contents of a "reproducible" build. The
 # tag is kept alongside the digest purely so a human can read which release
 # the digest refers to. Renovate/Dependabot bumps these (.github/dependabot.yml).
-FROM node:26-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS ui
+FROM node:26-alpine@sha256:dbaa92e5758cbbcf85d65d5403fdb530fe3442cbe8c6dbfb7ef23365450d5070 AS ui
 WORKDIR /ui
 COPY web/package.json web/package-lock.json ./
 # npm ci requires the lock file and never modifies it, so the exact dependency
