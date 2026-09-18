@@ -6,7 +6,7 @@ toolchain go1.27.1
 
 require (
 	github.com/beholdrapp/stalkr v0.0.0-20260911195308-217962e71f06
-	go.opentelemetry.io/collector/pdata v1.66.0
+	go.opentelemetry.io/collector/pdata v1.67.0
 	go.opentelemetry.io/proto/otlp v1.11.0
 	k8s.io/api v0.37.0
 	k8s.io/apimachinery v0.37.0
@@ -15,7 +15,7 @@ require (
 require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
-	go.opentelemetry.io/collector/featuregate v1.66.0 // indirect
+	go.opentelemetry.io/collector/featuregate v1.67.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260819154853-08b0e4226688 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
