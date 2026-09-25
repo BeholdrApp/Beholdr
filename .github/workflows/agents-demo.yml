@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 26
-      - uses: actions/setup-dotnet@bbbb8c9ab609f9ab643834ffe948a0f577bc4c0c
+      - uses: actions/setup-dotnet@4d6fc87ace54e43d120cd7440feac76858850a21
         with:
           dotnet-version: |
             8.0.x
