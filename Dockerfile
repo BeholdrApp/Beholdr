@@ -18,7 +18,7 @@ RUN npm run build          # -> /ui/build (static SPA)
 # Pinned to a current patch release, not a floating minor tag: the Go
 # standard library ships inside the compiled binary, so the build toolchain
 # itself is part of the release's vulnerability surface (see #6).
-FROM golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS build
+FROM golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 # go.sum is committed, so this only downloads/verifies against it — it never
